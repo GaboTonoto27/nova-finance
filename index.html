@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NOVA — Personal Finance Intelligence</title>
+    <meta name="description" content="A modern, minimalist personal finance platform focused on financial organization, data analytics, and intelligence." />
+    <meta property="og:title" content="NOVA — Personal Finance Intelligence" />
+    <meta property="og:description" content="A modern, minimalist personal finance platform focused on financial organization, data analytics, and intelligence." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var theme = localStorage.getItem('nova_theme');
+          var effectiveTheme = theme === 'light' ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', effectiveTheme);
+          if (effectiveTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+          } else {
+            document.documentElement.classList.add('light');
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen antialiased font-sans selection:bg-teal-500/20 selection:text-teal-400">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
