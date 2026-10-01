@@ -10,9 +10,11 @@ import {
   Plus,
   MoreHorizontal,
   X,
+  LogOut,
 } from 'lucide-react';
 import { NavigationRoute } from '../../types/finance';
 import { UI_COPY } from '../../data/copy';
+import { useAuth } from '../../context/AuthContext';
 
 interface MobileNavProps {
   currentRoute: NavigationRoute;
@@ -26,6 +28,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   onOpenAddModal,
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const { usuario, perfil, cerrarSesion, obtenerIniciales } = useAuth();
+
+  const nombreUsuario = perfil?.nombre || usuario?.displayName || UI_COPY.brand.userTitle || 'Usuario';
+  const emailUsuario = perfil?.email || usuario?.email || '';
+  const iniciales = obtenerIniciales();
 
   const handleSelectRoute = (route: NavigationRoute) => {
     onNavigate(route);
@@ -98,6 +105,34 @@ export const MobileNav: React.FC<MobileNavProps> = ({
               >
                 <Settings className="w-5 h-5 text-[var(--color-accent)] stroke-[2]" />
                 <span>{UI_COPY.nav.settings}</span>
+              </button>
+            </div>
+
+            {/* Mobile User Profile & Logout */}
+            <div className="pt-3 border-t border-[var(--color-border)] flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 font-bold flex items-center justify-center text-xs shrink-0">
+                  {iniciales}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-bold text-[var(--color-text)] truncate">
+                    {nombreUsuario}
+                  </span>
+                  <span className="text-[11px] text-[var(--color-text-muted)] truncate">
+                    {emailUsuario || 'Plan Personal'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMoreMenu(false);
+                  cerrarSesion();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer shrink-0"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Salir</span>
               </button>
             </div>
           </div>

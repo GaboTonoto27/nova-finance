@@ -29,6 +29,7 @@ import {
 import { TransactionRow } from '../components/common/TransactionRow';
 import { formatCurrency } from '../data/mockData';
 import { UI_COPY, BUDGET_LABELS, getGreeting } from '../data/copy';
+import { useAuth } from '../context/AuthContext';
 
 interface DashboardViewProps {
   summary: FinancialSummary;
@@ -56,7 +57,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAddModal,
   onNavigate,
 }) => {
-  const { greeting, subtitle } = getGreeting('Nicolás');
+  const { perfil, usuario } = useAuth();
+  const primerNombre =
+    perfil?.nombre?.trim().split(/\s+/)[0] ||
+    usuario?.displayName?.trim().split(/\s+/)[0] ||
+    'Hola';
+  const { greeting, subtitle } = getGreeting(primerNombre);
   const recentTransactions = transactions.slice(0, 5);
 
   const totalAllocated = budgets.reduce((acc, b) => acc + b.allocated, 0);

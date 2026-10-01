@@ -9,10 +9,12 @@ import {
   Settings,
   ShieldCheck,
   PlusCircle,
+  LogOut,
 } from 'lucide-react';
 import { NavigationRoute } from '../../types/finance';
 import { NovaLogo } from './NovaLogo';
 import { UI_COPY } from '../../data/copy';
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarProps {
   currentRoute: NavigationRoute;
@@ -42,6 +44,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNavigate,
   onOpenAddModal,
 }) => {
+  const { usuario, perfil, cerrarSesion, obtenerIniciales } = useAuth();
+  const nombreUsuario = perfil?.nombre || usuario?.displayName || UI_COPY.brand.userTitle || 'Usuario';
+  const emailUsuario = perfil?.email || usuario?.email || '';
+  const iniciales = obtenerIniciales();
+
   return (
     <aside
       className="hidden md:flex flex-col w-64 bg-[var(--color-sidebar-bg)] border-r border-[var(--color-border)] text-[var(--color-text-secondary)] h-screen sticky top-0 shrink-0 select-none z-30 transition-colors"
@@ -116,18 +123,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* User profile footer */}
-      <div className="px-4 py-3 border-t border-[var(--color-border)] flex items-center gap-3 transition-colors">
-        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 flex items-center justify-center text-xs font-bold shadow-xs">
-          NM
+      <div className="px-4 py-3 border-t border-[var(--color-border)] flex items-center justify-between gap-2 transition-colors">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 flex items-center justify-center text-xs font-bold shadow-xs">
+            {iniciales}
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-bold text-[var(--color-text)] truncate" title={nombreUsuario}>
+              {nombreUsuario}
+            </span>
+            <span className="text-[11px] text-[var(--color-text-muted)] truncate font-medium" title={emailUsuario}>
+              {emailUsuario || 'Plan Personal'}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col min-w-0">
-          <span className="text-xs font-bold text-[var(--color-text)] truncate">
-            Nicolás Moreno
-          </span>
-          <span className="text-[11px] text-[var(--color-text-muted)] truncate font-medium">
-            Plan Personal
-          </span>
-        </div>
+        <button
+          onClick={cerrarSesion}
+          type="button"
+          className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0"
+          title="Cerrar sesión"
+          aria-label="Cerrar sesión"
+        >
+          <LogOut className="w-4 h-4 stroke-[2]" />
+        </button>
       </div>
     </aside>
   );

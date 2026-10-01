@@ -2,5 +2,7 @@
   "name": "NOVA — Personal Finance Intelligence",
   "description": "A modern, minimalist personal finance platform focused on financial organization, data analytics, and intelligence.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

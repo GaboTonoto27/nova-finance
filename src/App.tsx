@@ -10,6 +10,7 @@ import { Sidebar } from './components/common/Sidebar';
 import { MobileNav } from './components/common/MobileNav';
 import { Header } from './components/common/Header';
 import { TransactionModal } from './components/common/TransactionModal';
+import { NovaLogo } from './components/common/NovaLogo';
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
 import { BudgetsView } from './views/BudgetsView';
@@ -17,10 +18,26 @@ import { GoalsView } from './views/GoalsView';
 import { AnalyticsView } from './views/AnalyticsView';
 import { InsightsView } from './views/InsightsView';
 import { SettingsView } from './views/SettingsView';
+import { LoginView } from './views/LoginView';
+import { RegisterView } from './views/RegisterView';
+import { RecuperarPasswordView } from './views/RecuperarPasswordView';
 import { ThemeProvider } from './context/ThemeContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+
+type AuthMode = 'login' | 'register' | 'forgot';
 
 function AppContent() {
-  // Navigation State with URL Hash synchronization
+  const { usuario, cargando } = useAuth();
+
+  // Auth screen state
+  const [authMode, setAuthMode] = useState<AuthMode>(() => {
+    const hash = window.location.hash.toLowerCase();
+    if (hash.includes('recuperar') || hash.includes('forgot')) return 'forgot';
+    if (hash.includes('registro') || hash.includes('register')) return 'register';
+    return 'login';
+  });
+
+  // Navigation State with URL Hash synchronization for authenticated view
   const [currentRoute, setCurrentRoute] = useState<NavigationRoute>(() => {
     const hash = window.location.hash.replace('#/', '').replace('#', '') as NavigationRoute;
     const validRoutes: NavigationRoute[] = [
@@ -56,24 +73,35 @@ function AppContent() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace('#/', '').replace('#', '') as NavigationRoute;
-      const validRoutes: NavigationRoute[] = [
-        'dashboard',
-        'transactions',
-        'budgets',
-        'goals',
-        'analytics',
-        'insights',
-        'settings',
-      ];
-      if (validRoutes.includes(hash)) {
-        setCurrentRoute(hash);
+      const hash = window.location.hash.toLowerCase();
+      if (!usuario) {
+        if (hash.includes('recuperar') || hash.includes('forgot')) {
+          setAuthMode('forgot');
+        } else if (hash.includes('registro') || hash.includes('register')) {
+          setAuthMode('register');
+        } else {
+          setAuthMode('login');
+        }
+      } else {
+        const cleanHash = window.location.hash.replace('#/', '').replace('#', '') as NavigationRoute;
+        const validRoutes: NavigationRoute[] = [
+          'dashboard',
+          'transactions',
+          'budgets',
+          'goals',
+          'analytics',
+          'insights',
+          'settings',
+        ];
+        if (validRoutes.includes(cleanHash)) {
+          setCurrentRoute(cleanHash);
+        }
       }
     };
 
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [usuario]);
 
   // Handle adding a new transaction dynamically
   const handleAddTransaction = (newTxData: Omit<Transaction, 'id'>) => {
@@ -82,10 +110,8 @@ function AppContent() {
       id: `tx-${Date.now().toString(36)}`,
     };
 
-    // Prepend to transaction feed
     setTransactions((prev) => [newTx, ...prev]);
 
-    // Recalculate financial summary live
     setSummary((prev) => {
       let newBalance = prev.currentBalance;
       let newIncome = prev.monthlyIncome;
@@ -111,7 +137,6 @@ function AppContent() {
       };
     });
 
-    // Update budget spend if category matches
     if (newTx.type === 'expense') {
       setBudgets((prev) =>
         prev.map((b) => {
@@ -124,13 +149,70 @@ function AppContent() {
     }
   };
 
-  // Reset to initial demo mock data
   const handleResetData = () => {
     setTransactions(INITIAL_TRANSACTIONS);
     setBudgets(INITIAL_BUDGETS);
     setSummary(INITIAL_SUMMARY);
   };
 
+  // 1. Loading screen while auth state resolves
+  if (cargando) {
+    return (
+      <div className="min-h-screen bg-[var(--color-bg)] flex flex-col items-center justify-center p-6 text-[var(--color-text)] transition-colors">
+        <div className="flex flex-col items-center gap-6 animate-pulse">
+          <NovaLogo size="lg" showSubtitle={true} />
+          <div className="flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-bounce [animation-delay:-0.3s]" />
+            <div className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-bounce [animation-delay:-0.15s]" />
+            <div className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-bounce" />
+          </div>
+          <span className="text-xs font-medium text-[var(--color-text-muted)] tracking-wide">
+            Cargando tus finanzas...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated views (Login, Register, Password Recovery)
+  if (!usuario) {
+    if (authMode === 'register') {
+      return (
+        <RegisterView
+          onSwitchToLogin={() => {
+            setAuthMode('login');
+            window.location.hash = '/login';
+          }}
+        />
+      );
+    }
+
+    if (authMode === 'forgot') {
+      return (
+        <RecuperarPasswordView
+          onBackToLogin={() => {
+            setAuthMode('login');
+            window.location.hash = '/login';
+          }}
+        />
+      );
+    }
+
+    return (
+      <LoginView
+        onSwitchToRegister={() => {
+          setAuthMode('register');
+          window.location.hash = '/registro';
+        }}
+        onSwitchToForgot={() => {
+          setAuthMode('forgot');
+          window.location.hash = '/recuperar-password';
+        }}
+      />
+    );
+  }
+
+  // 3. Authenticated App Layout
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] flex flex-col md:flex-row antialiased selection:bg-teal-500/20 selection:text-teal-400 transition-colors">
       {/* Desktop Sidebar Navigation */}
@@ -175,17 +257,11 @@ function AppContent() {
             />
           )}
 
-          {currentRoute === 'goals' && (
-            <GoalsView goals={INITIAL_GOALS} />
-          )}
+          {currentRoute === 'goals' && <GoalsView goals={INITIAL_GOALS} />}
 
-          {currentRoute === 'analytics' && (
-            <AnalyticsView />
-          )}
+          {currentRoute === 'analytics' && <AnalyticsView />}
 
-          {currentRoute === 'insights' && (
-            <InsightsView />
-          )}
+          {currentRoute === 'insights' && <InsightsView />}
 
           {currentRoute === 'settings' && (
             <SettingsView onResetData={handleResetData} />
@@ -214,7 +290,9 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </ThemeProvider>
   );
 }
