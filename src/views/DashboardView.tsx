@@ -1,13 +1,11 @@
 import React from 'react';
 import {
-  Wallet,
   ArrowUpRight,
   ArrowDownRight,
   Plus,
   ArrowRight,
   Target,
   Sparkles,
-  PieChart as PieIcon,
   ShoppingBag,
   Home,
   Laptop,
@@ -28,7 +26,12 @@ import {
 } from '../types/finance';
 import { TransactionRow } from '../components/common/TransactionRow';
 import { formatCurrency } from '../data/mockData';
-import { UI_COPY, BUDGET_LABELS, getGreeting } from '../data/copy';
+import {
+  UI_COPY,
+  BUDGET_LABELS,
+  getTimeGreeting,
+  getFinancialMood,
+} from '../data/copy';
 import { useAuth } from '../context/AuthContext';
 
 interface DashboardViewProps {
@@ -49,6 +52,18 @@ const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>
   'Culture & Equipment': Utensils,
 };
 
+// Estilos por tono del mensaje motivador
+const MOOD_STYLES: Record<
+  'excellent' | 'good' | 'warning' | 'alert' | 'neutral',
+  string
+> = {
+  excellent: 'text-emerald-600 dark:text-emerald-400',
+  good: 'text-teal-600 dark:text-teal-400',
+  warning: 'text-amber-600 dark:text-amber-400',
+  alert: 'text-rose-600 dark:text-rose-400',
+  neutral: 'text-[var(--color-text-secondary)]',
+};
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   summary,
   transactions,
@@ -61,38 +76,49 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const primerNombre =
     perfil?.nombre?.trim().split(/\s+/)[0] ||
     usuario?.displayName?.trim().split(/\s+/)[0] ||
-    'Hola';
-  const { greeting, subtitle } = getGreeting(primerNombre);
+    'Usuario';
+
+  const greetingBase = getTimeGreeting();
+  const greeting = `${greetingBase}, ${primerNombre}`;
+
+  // Mensaje motivador segun estado financiero
+  const mood = getFinancialMood(
+    summary.savingsRate,
+    summary.monthlyIncome,
+    summary.monthlyExpenses
+  );
+  const moodClass = MOOD_STYLES[mood.tone];
+
   const recentTransactions = transactions.slice(0, 5);
 
   const totalAllocated = budgets.reduce((acc, b) => acc + b.allocated, 0);
   const totalSpent = budgets.reduce((acc, b) => acc + b.spent, 0);
-  const budgetUtilization = Math.round((totalSpent / totalAllocated) * 100);
+  const budgetUtilization =
+    totalAllocated > 0 ? Math.round((totalSpent / totalAllocated) * 100) : 0;
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
-      {/* 1. Saludo personal cálido */}
+      {/* 1. Saludo personal calido con mensaje motivador */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--color-text)]">
             {greeting}
           </h1>
-          <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] mt-1 font-normal">
-            {subtitle}
+          <p className={`text-xs sm:text-sm mt-1 font-medium ${moodClass}`}>
+            {mood.message}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
             <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>Tus cuentas al día</span>
+            <span>Tus cuentas al dia</span>
           </span>
         </div>
       </div>
 
-      {/* 2. Segundo bloque — Protagonista: El saldo disponible */}
+      {/* 2. Protagonista: El saldo disponible */}
       <div className="relative overflow-hidden bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-3xl p-6 sm:p-8 shadow-sm transition-all interactive-card">
-        {/* Subtle decorative glow */}
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 space-y-3">
@@ -110,20 +136,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {formatCurrency(summary.currentBalance)}
             </h2>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-            <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 tabular-nums">
-              <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>+{summary.balanceChangePercentage}%</span>
-            </span>
-            <span className="text-[var(--color-text-secondary)]">
-              {UI_COPY.metrics.vsLastMonth} · vas por buen camino con tus gastos
-            </span>
-          </div>
         </div>
       </div>
 
-      {/* 3. Tercer bloque — Dos tarjetas medianas (Ingresos y Gastos) */}
+      {/* 3. Ingresos / Gastos / Ahorro */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Ingresos del mes */}
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all interactive-card">
@@ -139,16 +155,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             +{formatCurrency(summary.monthlyIncome)}
           </div>
           <div className="flex items-center gap-1.5 mt-2 text-xs">
-            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              +{summary.incomeChangePercentage}%
-            </span>
             <span className="text-[var(--color-text-secondary)] text-[11px]">
-              {UI_COPY.metrics.vsTargetBase}
+              Total ingresado este mes
             </span>
           </div>
         </div>
 
-        {/* En qué se fue el dinero */}
+        {/* En que se fue el dinero */}
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all interactive-card">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
@@ -162,16 +175,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             -{formatCurrency(summary.monthlyExpenses)}
           </div>
           <div className="flex items-center gap-1.5 mt-2 text-xs">
-            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              {summary.expensesChangePercentage}%
-            </span>
             <span className="text-[var(--color-text-secondary)] text-[11px]">
-              {UI_COPY.metrics.spendingContraction}
+              Total gastado este mes
             </span>
           </div>
         </div>
 
-        {/* Cuánto estás ahorrando */}
+        {/* Cuanto estas ahorrando */}
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all sm:col-span-2 lg:col-span-1 interactive-card">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
@@ -190,17 +200,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
           <div className="flex items-center gap-1.5 mt-2 text-xs">
-            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              +4.7%
-            </span>
             <span className="text-[var(--color-text-secondary)] text-[11px]">
-              {UI_COPY.metrics.aboveTargetReserve}
+              Tasa de ahorro del mes
             </span>
           </div>
         </div>
       </div>
 
-      {/* 4. Cuarto bloque — Accesos rápidos horizontales tipo píldora */}
+      {/* 4. Accesos rapidos */}
       <div className="flex flex-wrap items-center gap-2.5 pt-1">
         <button
           onClick={() => onOpenAddModal('expense')}
@@ -231,17 +238,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </button>
       </div>
 
-      {/* 5 y 6. Grid: En qué gastaste (Categorías) & Tus Metas */}
+      {/* 5 y 6. Grid: En que gastaste & Tus Metas */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* 5. En qué gastaste */}
+        {/* 5. En que gastaste */}
         <div className="lg:col-span-7 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-5 shadow-xs transition-colors interactive-card">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-base font-bold tracking-tight text-[var(--color-text)]">
-                En qué gastaste
+                En que gastaste
               </h2>
               <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                Usaste el <strong className="text-[var(--color-text)] font-semibold">{budgetUtilization}%</strong> de tu presupuesto este mes
+                Usaste el{' '}
+                <strong className="text-[var(--color-text)] font-semibold">
+                  {budgetUtilization}%
+                </strong>{' '}
+                de tu presupuesto este mes
               </p>
             </div>
             <button
@@ -253,10 +264,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           </div>
 
-          {/* Segmented Progress Breakdown Bar with soft aesthetics */}
+          {/* Barra segmentada */}
           <div className="w-full h-3 bg-[var(--color-surface-subtle)] rounded-full overflow-hidden flex gap-1 p-0.5 border border-[var(--color-border)]">
             {budgets.map((b) => {
-              const widthPct = Math.max(4, (b.spent / totalSpent) * 100);
+              const widthPct = totalSpent > 0 ? Math.max(4, (b.spent / totalSpent) * 100) : 4;
               return (
                 <div
                   key={b.id}
@@ -268,15 +279,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             })}
           </div>
 
-          {/* Category List */}
+          {/* Lista de categorias */}
           <div className="space-y-3 pt-1">
             {budgets.map((cat) => {
-              const percent = Math.min(100, Math.round((cat.spent / cat.allocated) * 100));
+              const percent = Math.min(
+                100,
+                Math.round((cat.spent / cat.allocated) * 100)
+              );
               const isOver = cat.spent > cat.allocated;
               const Icon = CATEGORY_ICONS[cat.name] || ShoppingBag;
 
               return (
-                <div key={cat.id} className="space-y-1.5 p-2 rounded-xl hover:bg-[var(--color-surface-hover)] transition-colors">
+                <div
+                  key={cat.id}
+                  className="space-y-1.5 p-2 rounded-xl hover:bg-[var(--color-surface-hover)] transition-colors"
+                >
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div
@@ -290,12 +307,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </span>
                     </div>
                     <div className="text-right shrink-0 tabular-nums">
-                      <span className="font-bold text-[var(--color-text)]">{formatCurrency(cat.spent)}</span>
-                      <span className="text-[var(--color-text-muted)] text-[11px] ml-1">/ {formatCurrency(cat.allocated)}</span>
+                      <span className="font-bold text-[var(--color-text)]">
+                        {formatCurrency(cat.spent)}
+                      </span>
+                      <span className="text-[var(--color-text-muted)] text-[11px] ml-1">
+                        / {formatCurrency(cat.allocated)}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Progress track */}
                   <div className="w-full h-2 bg-[var(--color-surface-subtle)] rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${
@@ -313,7 +333,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* 6. Tus metas con termómetro / hitos visuales */}
+        {/* 6. Tus metas */}
         <div className="lg:col-span-5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 flex flex-col justify-between space-y-5 shadow-xs transition-colors interactive-card">
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -322,7 +342,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Tus metas
                 </h2>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                  Ahorros para lo que sueñas
+                  Ahorros para lo que suenas
                 </p>
               </div>
               <button
@@ -360,7 +380,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </span>
                     </div>
 
-                    {/* Progress track */}
                     <div className="w-full h-2.5 bg-[var(--color-border)] rounded-full overflow-hidden p-0.5">
                       <div
                         className="h-full rounded-full transition-all duration-500"
@@ -373,9 +392,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                     <div className="flex items-center justify-between text-xs tabular-nums text-[var(--color-text-secondary)]">
                       <span>
-                        Llevas <strong className="text-[var(--color-text)] font-semibold">{formatCurrency(goal.currentAmount)}</strong>
+                        Llevas{' '}
+                        <strong className="text-[var(--color-text)] font-semibold">
+                          {formatCurrency(goal.currentAmount)}
+                        </strong>
                       </span>
-                      <span className="text-[var(--color-text-muted)]">Meta: {formatCurrency(goal.targetAmount)}</span>
+                      <span className="text-[var(--color-text-muted)]">
+                        Meta: {formatCurrency(goal.targetAmount)}
+                      </span>
                     </div>
                   </div>
                 );
@@ -383,25 +407,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          {/* Quick tip / Motivación */}
           <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-start gap-3">
             <Sparkles className="w-4 h-4 text-[var(--color-accent)] shrink-0 mt-0.5 stroke-[2]" />
             <div className="text-xs text-[var(--color-text)] leading-relaxed">
-              <span className="font-bold text-[var(--color-accent)]">¡Buen ritmo!</span> Al ritmo de ahorro actual, completarás tu fondo de emergencia 18 días antes de lo planeado.
+              <span className="font-bold text-[var(--color-accent)]">Buen ritmo.</span>{' '}
+              Sigue registrando tus movimientos para ver proyecciones personalizadas.
             </div>
           </div>
         </div>
       </div>
 
-      {/* 7. Últimos movimientos (Máximo 5 con opción Ver todos) */}
+      {/* 7. Ultimos movimientos */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-4 shadow-xs transition-colors interactive-card">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[var(--color-border)]">
           <div>
             <h2 className="text-base font-bold tracking-tight text-[var(--color-text)]">
-              Últimos movimientos
+              Ultimos movimientos
             </h2>
             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-              Lo más reciente en tus cuentas
+              Lo mas reciente en tus cuentas
             </p>
           </div>
           <button
@@ -413,11 +437,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
 
-        <div className="divide-y divide-[var(--color-border-subtle)]">
-          {recentTransactions.map((tx) => (
-            <TransactionRow key={tx.id} transaction={tx} />
-          ))}
-        </div>
+        {transactions.length === 0 ? (
+          <div className="text-center py-8 space-y-3">
+            <div className="w-14 h-14 rounded-full bg-[var(--color-surface-subtle)] flex items-center justify-center mx-auto">
+              <Receipt className="w-6 h-6 text-[var(--color-text-muted)]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[var(--color-text)]">
+                Aun no tienes movimientos
+              </p>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                Empieza registrando tu primer gasto o ingreso.
+              </p>
+            </div>
+            <button
+              onClick={() => onOpenAddModal('expense')}
+              type="button"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold rounded-full transition-all shadow-sm shadow-teal-500/10 interactive-pill"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Registrar mi primer movimiento</span>
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-[var(--color-border-subtle)]">
+            {recentTransactions.map((tx) => (
+              <TransactionRow key={tx.id} transaction={tx} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

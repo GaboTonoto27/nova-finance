@@ -73,27 +73,11 @@ export interface FinancialSummary {
 // ============================================================================
 // NOVA v0.3 - Tipos para Firestore (Espanol)
 // ============================================================================
-// Estos tipos representan el modelo de datos que se persiste en Firestore.
-// Conviven temporalmente con los tipos mock (Transaction, BudgetCategory, etc.)
-// que seran migrados progresivamente en las fases 03.2 -> 03.4.
 
-/**
- * Tipo de movimiento financiero que un usuario puede registrar.
- * - ingreso: dinero que entra (salario, rendimientos, ventas, etc.)
- * - gasto: dinero que sale (compras, servicios, etc.)
- * - transferencia: movimiento entre cuentas propias
- * - inversion: dinero destinado a inversion (no es gasto, es traslado)
- */
 export type TipoMovimiento = 'ingreso' | 'gasto' | 'transferencia' | 'inversion';
 
-/**
- * Monedas soportadas por NOVA. COP es la moneda por defecto.
- */
 export type Moneda = 'COP' | 'USD' | 'EUR' | 'GBP';
 
-/**
- * Medio de pago utilizado en un movimiento.
- */
 export type MedioPago =
   | 'efectivo'
   | 'tarjeta_debito'
@@ -104,10 +88,8 @@ export type MedioPago =
   | 'paypal'
   | 'otro';
 
-/**
- * Categorias financieras predefinidas para clasificar movimientos.
- */
-export type CategoriaFinanciera =
+// Categorias para GASTOS
+export type CategoriaGasto =
   | 'vivienda'
   | 'mercado'
   | 'transporte'
@@ -115,16 +97,24 @@ export type CategoriaFinanciera =
   | 'salud'
   | 'educacion'
   | 'ocio'
-  | 'inversiones'
   | 'suscripciones'
   | 'deudas'
-  | 'ahorro'
   | 'otro';
 
-/**
- * Transaccion financiera persistida en Firestore.
- * Ruta: /users/{userId}/transactions/{transactionId}
- */
+// Categorias para INGRESOS
+export type CategoriaIngreso =
+  | 'sueldo'
+  | 'freelance'
+  | 'ventas'
+  | 'regalos'
+  | 'inversiones'
+  | 'reembolsos'
+  | 'prestamos'
+  | 'otros';
+
+// Union de todas las categorias (para tipos legacy)
+export type CategoriaFinanciera = CategoriaGasto | CategoriaIngreso | 'ahorro';
+
 export interface Transaccion {
   id?: string;
   userId: string;
@@ -144,10 +134,6 @@ export interface Transaccion {
   updatedAt: string;
 }
 
-/**
- * Tarjeta financiera del usuario (debito, credito, etc.).
- * Ruta: /users/{userId}/cards/{cardId}
- */
 export interface Tarjeta {
   id?: string;
   userId: string;
@@ -162,11 +148,6 @@ export interface Tarjeta {
   updatedAt: string;
 }
 
-/**
- * Saldo inicial configurado por el usuario.
- * Se guarda dentro del documento /users/{uid} y se usa como base
- * para calcular el saldo actual.
- */
 export interface SaldoInicialConfig {
   monto: number;
   moneda: string;

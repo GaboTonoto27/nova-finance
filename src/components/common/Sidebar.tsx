@@ -52,11 +52,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       className="hidden md:flex flex-col w-64 bg-[var(--color-sidebar-bg)] border-r border-[var(--color-border)] text-[var(--color-text-secondary)] h-screen sticky top-0 shrink-0 select-none z-30 transition-colors"
-      aria-label="Navegación Principal"
+      aria-label="Navegacion Principal"
     >
-      {/* Brand Header */}
+      {/* Brand Header - Clickeable */}
       <div className="h-18 px-6 flex items-center border-b border-[var(--color-border)]">
-        <NovaLogo size="md" showSubtitle={true} />
+        <NovaLogo
+          size="md"
+          showSubtitle={true}
+          onClick={() => onNavigate('dashboard')}
+        />
       </div>
 
       {/* Quick Action Button */}
@@ -111,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Security & Client-Side Isolation Notice */}
+      {/* Security Notice */}
       <div className="p-3.5 mx-3 mb-3 rounded-xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] transition-colors">
         <div className="flex items-center gap-2 text-xs font-semibold text-[var(--color-text)] mb-1">
           <ShieldCheck className="w-4 h-4 text-teal-500 dark:text-teal-400 shrink-0 stroke-[2]" />
@@ -141,8 +145,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={cerrarSesion}
           type="button"
           className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0"
-          title="Cerrar sesión"
-          aria-label="Cerrar sesión"
+          title="Cerrar sesion"
+          aria-label="Cerrar sesion"
         >
           <LogOut className="w-4 h-4 stroke-[2]" />
         </button>
@@ -150,4 +154,3 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
-

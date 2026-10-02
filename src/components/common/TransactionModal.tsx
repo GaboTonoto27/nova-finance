@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Check, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { Transaction, TransactionType } from '../../types/finance';
-import { AVAILABLE_CATEGORIES } from '../../data/mockData';
-import { UI_COPY, CATEGORY_LABELS } from '../../data/copy';
+import { CATEGORIAS_GASTO, CATEGORIAS_INGRESO } from '../../data/mockData';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -11,14 +10,24 @@ interface TransactionModalProps {
   initialType?: TransactionType;
 }
 
-// Opciones predeterminadas para el medio de pago
-const MEDIOS_PAGO_PREDETERMINADOS = [
+// Opciones de pago para GASTOS
+const MEDIOS_PAGO_GASTO = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'tarjeta_debito', label: 'Tarjeta debito' },
+  { value: 'tarjeta_credito', label: 'Tarjeta credito' },
+  { value: 'nequi', label: 'Nequi' },
+  { value: 'daviplata', label: 'Daviplata' },
+  { value: 'transferencia', label: 'Transferencia bancaria' },
+  { value: 'paypal', label: 'PayPal' },
+  { value: 'otro', label: 'Otro (especificar)' },
+];
+
+// Opciones de recepcion para INGRESOS
+const MEDIOS_RECEPCION_INGRESO = [
+  { value: 'transferencia', label: 'Transferencia bancaria' },
   { value: 'efectivo', label: 'Efectivo' },
   { value: 'nequi', label: 'Nequi' },
   { value: 'daviplata', label: 'Daviplata' },
-  { value: 'tarjeta_debito', label: 'Tarjeta debito' },
-  { value: 'tarjeta_credito', label: 'Tarjeta credito' },
-  { value: 'transferencia', label: 'Transferencia bancaria' },
   { value: 'paypal', label: 'PayPal' },
   { value: 'otro', label: 'Otro (especificar)' },
 ];
@@ -33,25 +42,50 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [merchant, setMerchant] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('Groceries');
+  const [category, setCategory] = useState('mercado');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const [customPaymentMethod, setCustomPaymentMethod] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const isExpense = type === 'expense';
+
+  const categoriasDisponibles = useMemo(
+    () => (isExpense ? CATEGORIAS_GASTO : CATEGORIAS_INGRESO),
+    [isExpense]
+  );
+
+  const mediosDisponibles = useMemo(
+    () => (isExpense ? MEDIOS_PAGO_GASTO : MEDIOS_RECEPCION_INGRESO),
+    [isExpense]
+  );
+
+  // Al abrir el modal o cambiar initialType, reseteamos
   useEffect(() => {
     if (isOpen) {
       setType(initialType);
       setErrors({});
+      setCategory(initialType === 'expense' ? 'mercado' : 'sueldo');
+      setPaymentMethod(initialType === 'expense' ? 'efectivo' : 'transferencia');
+      setCustomPaymentMethod('');
     }
   }, [isOpen, initialType]);
+
+  // Cuando el usuario cambia el tipo manualmente
+  useEffect(() => {
+    setCategory(type === 'expense' ? 'mercado' : 'sueldo');
+    setPaymentMethod(type === 'expense' ? 'efectivo' : 'transferencia');
+    setCustomPaymentMethod('');
+  }, [type]);
 
   if (!isOpen) return null;
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (!merchant.trim()) {
-      newErrors.merchant = 'Dinos donde o a quien le pagaste.';
+      newErrors.merchant = isExpense
+        ? 'Dinos donde pagaste.'
+        : 'Dinos de donde viene el ingreso.';
     }
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -64,7 +98,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       newErrors.date = 'La fecha es obligatoria.';
     }
     if (paymentMethod === 'otro' && !customPaymentMethod.trim()) {
-      newErrors.paymentMethod = 'Especifica como pagaste.';
+      newErrors.paymentMethod = 'Especifica los detalles.';
     }
 
     setErrors(newErrors);
@@ -75,11 +109,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     e.preventDefault();
     if (!validate()) return;
 
-    // Si el usuario eligio "Otro", usamos el texto custom
     const finalPaymentMethod =
       paymentMethod === 'otro' && customPaymentMethod.trim()
         ? customPaymentMethod.trim()
-        : MEDIOS_PAGO_PREDETERMINADOS.find((m) => m.value === paymentMethod)?.label ||
+        : mediosDisponibles.find((m) => m.value === paymentMethod)?.label ||
           paymentMethod;
 
     onAddTransaction({
@@ -93,13 +126,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       status: 'completed',
     });
 
-    // Reset and close
     setMerchant('');
     setDescription('');
     setAmount('');
-    setCategory('Groceries');
-    setPaymentMethod('efectivo');
-    setCustomPaymentMethod('');
     onClose();
   };
 
@@ -115,10 +144,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border)]">
           <div>
             <h2 id="modal-title" className="text-lg font-bold text-[var(--color-text)]">
-              {type === 'expense' ? 'Registrar un gasto' : 'Registrar un ingreso'}
+              {isExpense ? 'Registrar un gasto' : 'Registrar un ingreso'}
             </h2>
             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-              Guarda tus movimientos para tener tus cuentas al dia
+              {isExpense
+                ? 'Guarda tus gastos para tener tus cuentas al dia'
+                : 'Registra lo que entra para trackear tus finanzas'}
             </p>
           </div>
           <button
@@ -138,7 +169,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               type="button"
               onClick={() => setType('expense')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition-all ${
-                type === 'expense'
+                isExpense
                   ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 shadow-xs'
                   : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
               }`}
@@ -150,7 +181,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               type="button"
               onClick={() => setType('income')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition-all ${
-                type === 'income'
+                !isExpense
                   ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-xs'
                   : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
               }`}
@@ -160,10 +191,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </button>
           </div>
 
-          {/* Amount Input */}
+          {/* Amount */}
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
-              {UI_COPY.forms.amount}
+              Cuanto fue? ($ COP) *
             </label>
             <div className="relative">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] font-bold text-lg">
@@ -173,7 +204,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 type="number"
                 step="any"
                 min="0"
-                placeholder={UI_COPY.forms.amountPlaceholder}
+                placeholder="50000"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className={`w-full pl-8 pr-4 py-2.5 bg-[var(--color-surface-subtle)] border rounded-xl text-lg font-bold text-[var(--color-text)] tabular-nums placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 ${
@@ -193,11 +224,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
-                {UI_COPY.forms.merchant}
+                {isExpense ? 'Donde pagaste? *' : 'De donde viene? *'}
               </label>
               <input
                 type="text"
-                placeholder={UI_COPY.forms.merchantPlaceholder}
+                placeholder={
+                  isExpense ? 'ej. Exito, Netflix, Uber' : 'ej. Empresa, Cliente, Mama'
+                }
                 value={merchant}
                 onChange={(e) => setMerchant(e.target.value)}
                 className={`w-full px-3 py-2 bg-[var(--color-surface-subtle)] border rounded-xl text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 ${
@@ -207,22 +240,24 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 }`}
               />
               {errors.merchant && (
-                <p className="text-xs text-rose-500 mt-1 font-medium">{errors.merchant}</p>
+                <p className="text-xs text-rose-500 mt-1 font-medium">
+                  {errors.merchant}
+                </p>
               )}
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
-                {UI_COPY.forms.category}
+                Categoria *
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full px-3 py-2 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"
               >
-                {AVAILABLE_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {CATEGORY_LABELS[cat] || cat}
+                {categoriasDisponibles.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
                   </option>
                 ))}
               </select>
@@ -233,7 +268,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
-                {UI_COPY.forms.date}
+                Fecha *
               </label>
               <input
                 type="date"
@@ -245,7 +280,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
-                {UI_COPY.forms.paymentChannel}
+                {isExpense ? 'Como pagaste?' : 'Como recibiste el dinero?'}
               </label>
               <select
                 value={paymentMethod}
@@ -256,7 +291,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
                 }`}
               >
-                {MEDIOS_PAGO_PREDETERMINADOS.map((m) => (
+                {mediosDisponibles.map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}
                   </option>
@@ -265,15 +300,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Custom payment method (si elige "Otro") */}
+          {/* Custom payment method */}
           {paymentMethod === 'otro' && (
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
-                Especifica como pagaste
+                {isExpense ? 'Especifica como pagaste' : 'Especifica como recibiste'}
               </label>
               <input
                 type="text"
-                placeholder="ej. PSE, tarjeta regalo, Bitcoin"
+                placeholder="ej. PSE, tarjeta regalo, cripto"
                 value={customPaymentMethod}
                 onChange={(e) => setCustomPaymentMethod(e.target.value)}
                 className={`w-full px-3 py-2 bg-[var(--color-surface-subtle)] border rounded-xl text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 ${
@@ -293,32 +328,36 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           {/* Note */}
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
-              {UI_COPY.forms.note}
+              Nota o detalle (opcional)
             </label>
             <input
               type="text"
-              placeholder={UI_COPY.forms.notePlaceholder}
+              placeholder="ej. Compra semanal, pago mensual"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"
             />
           </div>
 
-          {/* Action buttons */}
+          {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--color-border)]">
             <button
               type="button"
               onClick={onClose}
               className="px-4 py-2 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
             >
-              {UI_COPY.actions.cancel}
+              Cancelar
             </button>
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-5 py-2.5 bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 text-xs font-bold rounded-full transition-colors shadow-sm shadow-teal-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 interactive-pill"
+              className={`flex items-center gap-1.5 px-5 py-2.5 text-xs font-bold rounded-full transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 interactive-pill ${
+                isExpense
+                  ? 'bg-rose-500 hover:bg-rose-400 active:bg-rose-600 text-white shadow-rose-500/10 focus-visible:ring-rose-400'
+                  : 'bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white shadow-emerald-500/10 focus-visible:ring-emerald-400'
+              }`}
             >
               <Check className="w-4 h-4 stroke-[2.5]" />
-              <span>{UI_COPY.actions.saveTransaction}</span>
+              <span>{isExpense ? 'Guardar gasto' : 'Guardar ingreso'}</span>
             </button>
           </div>
         </form>

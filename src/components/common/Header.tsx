@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Bell, Calendar, Sun, Moon, LogOut, User as UserIcon } from 'lucide-react';
+import { Plus, Bell, Calendar, Sun, Moon, LogOut } from 'lucide-react';
 import { NavigationRoute } from '../../types/finance';
 import { NovaLogo } from './NovaLogo';
 import { UI_COPY } from '../../data/copy';
@@ -9,19 +9,24 @@ import { useAuth } from '../../context/AuthContext';
 interface HeaderProps {
   currentRoute: NavigationRoute;
   onOpenAddModal: () => void;
+  onNavigate: (route: NavigationRoute) => void;
 }
 
 const ROUTE_LABELS: Record<NavigationRoute, { title: string; subtitle: string }> = {
   dashboard: { title: 'Inicio', subtitle: 'Tu resumen financiero de hoy' },
   transactions: { title: 'Movimientos', subtitle: 'Tus ingresos y gastos organizados' },
   budgets: { title: 'Presupuestos', subtitle: 'Controla lo que gastas mes a mes' },
-  goals: { title: 'Tus Metas', subtitle: 'Ahorros para lo que sueñas' },
-  analytics: { title: 'Estadísticas', subtitle: 'Cómo se mueve tu dinero en el tiempo' },
+  goals: { title: 'Tus Metas', subtitle: 'Ahorros para lo que suenas' },
+  analytics: { title: 'Estadisticas', subtitle: 'Como se mueve tu dinero en el tiempo' },
   insights: { title: 'Consejos para ti', subtitle: 'Recomendaciones personalizadas' },
   settings: { title: 'Ajustes', subtitle: 'Tus preferencias y privacidad' },
 };
 
-export const Header: React.FC<HeaderProps> = ({ currentRoute, onOpenAddModal }) => {
+export const Header: React.FC<HeaderProps> = ({
+  currentRoute,
+  onOpenAddModal,
+  onNavigate,
+}) => {
   const current = ROUTE_LABELS[currentRoute];
   const { theme, toggleTheme } = useTheme();
   const { usuario, perfil, cerrarSesion, obtenerIniciales } = useAuth();
@@ -32,7 +37,7 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onOpenAddModal }) 
   const emailUsuario = perfil?.email || usuario?.email || '';
   const iniciales = obtenerIniciales();
 
-  // Cerrar menú al hacer clic afuera
+  // Cerrar menu al hacer clic afuera
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -47,10 +52,14 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onOpenAddModal }) 
 
   return (
     <header className="sticky top-0 z-20 bg-[var(--color-header-bg)] backdrop-blur-md border-b border-[var(--color-border)] px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4 transition-colors">
-      {/* Zone 1: Friendly Section Title (No admin breadcrumb) */}
+      {/* Zone 1: Title / Logo movil */}
       <div className="flex items-center gap-3 min-w-0">
+        {/* Logo clickeable en movil */}
         <div className="md:hidden flex items-center gap-2.5">
-          <NovaLogo size="sm" />
+          <NovaLogo
+            size="sm"
+            onClick={() => onNavigate('dashboard')}
+          />
           <span className="text-sm font-bold text-[var(--color-text)]">
             {current.title}
           </span>
@@ -65,10 +74,13 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onOpenAddModal }) 
         </div>
       </div>
 
-      {/* Zone 2: Date/Cycle Contextual Label */}
+      {/* Zone 2: Date Label */}
       <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)]">
         <Calendar className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
-        <span>Septiembre 2026 · <strong className="text-[var(--color-text)] font-semibold">Corte al 30</strong></span>
+        <span>
+          Septiembre 2026 ·{' '}
+          <strong className="text-[var(--color-text)] font-semibold">Corte al 30</strong>
+        </span>
       </div>
 
       {/* Zone 3: Actions */}
@@ -83,7 +95,7 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onOpenAddModal }) 
           <span>{UI_COPY.actions.addTransaction}</span>
         </button>
 
-        {/* Theme Toggle Button */}
+        {/* Theme Toggle */}
         <button
           type="button"
           onClick={toggleTheme}
@@ -98,6 +110,7 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onOpenAddModal }) 
           )}
         </button>
 
+        {/* Notifications */}
         <button
           type="button"
           className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] rounded-full transition-colors relative"
@@ -108,13 +121,13 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onOpenAddModal }) 
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-teal-400 rounded-full" />
         </button>
 
-        {/* User Avatar with dropdown */}
+        {/* User Avatar */}
         <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="w-8 h-8 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 font-bold flex items-center justify-center text-xs shadow-xs hover:ring-2 hover:ring-teal-400 transition-all cursor-pointer focus:outline-none"
-            aria-label="Menú de usuario"
+            aria-label="Menu de usuario"
             aria-expanded={isMenuOpen}
           >
             {iniciales}
@@ -146,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onOpenAddModal }) 
                   className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Cerrar sesión</span>
+                  <span>Cerrar sesion</span>
                 </button>
               </div>
             </div>
@@ -156,4 +169,3 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, onOpenAddModal }) 
     </header>
   );
 };
-

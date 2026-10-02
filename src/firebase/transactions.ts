@@ -25,10 +25,15 @@ import { Transaccion, TipoMovimiento, Moneda, CategoriaFinanciera } from '../typ
 // - Validan los datos antes de escribir.
 // - Cada usuario solo accede a sus propias transacciones.
 // - Errores en espanol.
+//
+// Orden: por fecha descendente, con desempate por createdAt descendente.
+// Esto garantiza que la ultima transaccion agregada siempre aparezca primero,
+// incluso si tiene la misma fecha que otras.
 
 const TIPOS_VALIDOS: TipoMovimiento[] = ['ingreso', 'gasto', 'transferencia', 'inversion'];
 const MONEDAS_VALIDAS: Moneda[] = ['COP', 'USD', 'EUR', 'GBP'];
 const CATEGORIAS_VALIDAS: CategoriaFinanciera[] = [
+  // Gastos
   'vivienda',
   'mercado',
   'transporte',
@@ -36,11 +41,20 @@ const CATEGORIAS_VALIDAS: CategoriaFinanciera[] = [
   'salud',
   'educacion',
   'ocio',
-  'inversiones',
   'suscripciones',
   'deudas',
-  'ahorro',
   'otro',
+  // Ingresos
+  'sueldo',
+  'freelance',
+  'ventas',
+  'regalos',
+  'inversiones',
+  'reembolsos',
+  'prestamos',
+  'otros',
+  // Ahorro
+  'ahorro',
 ];
 
 // ----------------------------------------------------------------------------
@@ -130,12 +144,16 @@ export async function crearTransaccion(
 
 /**
  * Obtiene todas las transacciones del usuario autenticado,
- * ordenadas por fecha descendente (mas recientes primero).
+ * ordenadas por fecha descendente, con desempate por createdAt.
  */
 export async function obtenerTransacciones(): Promise<Transaccion[]> {
   const uid = obtenerUidActual();
   try {
-    const q = query(transaccionesRef(uid), orderBy('fecha', 'desc'));
+    const q = query(
+      transaccionesRef(uid),
+      orderBy('fecha', 'desc'),
+      orderBy('createdAt', 'desc')
+    );
     const snapshot = await getDocs(q);
     return snapshot.docs.map((d) => ({
       id: d.id,
@@ -204,6 +222,7 @@ export async function eliminarTransaccion(id: string): Promise<void> {
 
 /**
  * Observa en tiempo real las transacciones del usuario.
+ * Ordenadas por fecha descendente, con desempate por createdAt.
  * Devuelve una funcion para cancelar la suscripcion.
  */
 export function observarTransacciones(
@@ -211,7 +230,11 @@ export function observarTransacciones(
   onError?: (error: Error) => void
 ): Unsubscribe {
   const uid = obtenerUidActual();
-  const q = query(transaccionesRef(uid), orderBy('fecha', 'desc'));
+  const q = query(
+    transaccionesRef(uid),
+    orderBy('fecha', 'desc'),
+    orderBy('createdAt', 'desc')
+  );
 
   return onSnapshot(
     q,

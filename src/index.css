@@ -5,14 +5,16 @@
   --font-mono: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* Default Dark Theme (Obsidian + Crystalline Teal) */
+/* ============================================================================
+   Dark Theme - Obsidian Crystalline (mantenido, sutilmente mas calido)
+   ============================================================================ */
 :root, html[data-theme="dark"], html.dark {
   color-scheme: dark;
-  --color-bg: #090D14;
-  --color-sidebar-bg: #0B0F17;
-  --color-header-bg: rgba(9, 13, 20, 0.9);
-  --color-surface: #0F1420;
-  --color-surface-subtle: #151B29;
+  --color-bg: #0A0D12;
+  --color-sidebar-bg: #0C1016;
+  --color-header-bg: rgba(10, 13, 18, 0.9);
+  --color-surface: #10151C;
+  --color-surface-subtle: #161C25;
   --color-surface-hover: rgba(30, 41, 59, 0.4);
   --color-border: rgba(51, 65, 85, 0.7);
   --color-border-subtle: rgba(51, 65, 85, 0.4);
@@ -30,42 +32,137 @@
   --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
 }
 
-/* Light Theme (Clean Luminous + Crystalline Teal, WCAG AA Compliant) */
+/* ============================================================================
+   Light Theme - Warm Sand (beige calido premium)
+   ============================================================================
+   Paleta inspirada en papel de alta calidad y tonos naturales.
+   Base beige, acentos teal, textos marron oscuro para calidez.
+   ============================================================================ */
 html[data-theme="light"], html.light {
   color-scheme: light;
-  --color-bg: #F8FAFC;
+
+  /* Fondos */
+  --color-bg: #FAF6EF;
   --color-sidebar-bg: #FFFFFF;
-  --color-header-bg: rgba(255, 255, 255, 0.92);
+  --color-header-bg: rgba(250, 246, 239, 0.92);
   --color-surface: #FFFFFF;
-  --color-surface-subtle: #F1F5F9;
-  --color-surface-hover: rgba(241, 245, 249, 0.9);
-  --color-border: #E2E8F0;
-  --color-border-subtle: #F1F5F9;
-  --color-text: #0F172A;
-  --color-text-secondary: #475569;
-  --color-text-muted: #64748B;
-  --color-muted: #64748B;
+  --color-surface-subtle: #F5EFE4;
+  --color-surface-hover: rgba(245, 239, 228, 0.8);
+
+  /* Bordes */
+  --color-border: #E8DFD1;
+  --color-border-subtle: #F0E9DC;
+
+  /* Textos (marron calido en lugar de negro) */
+  --color-text: #2D2520;
+  --color-text-secondary: #7A6A5C;
+  --color-text-muted: #A89584;
+  --color-muted: #A89584;
+
+  /* Acento (Teal calido, mantenido) */
   --color-accent: #0D9488;
   --color-accent-hover: #0F766E;
   --color-accent-subtle: rgba(13, 148, 136, 0.1);
   --color-accent-border: rgba(13, 148, 136, 0.25);
   --color-accent-text: #FFFFFF;
-  --color-card-divide: #E2E8F0;
-  --shadow-card: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
-  --shadow-modal: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
+
+  /* Divisores y sombras calidas */
+  --color-card-divide: #E8DFD1;
+  --shadow-card: 0 1px 3px 0 rgba(45, 37, 32, 0.05), 0 1px 2px -1px rgba(45, 37, 32, 0.03);
+  --shadow-modal: 0 20px 25px -5px rgba(45, 37, 32, 0.08), 0 8px 10px -6px rgba(45, 37, 32, 0.04);
 }
 
+/* ============================================================================
+   Base
+   ============================================================================ */
 @layer base {
   body {
     font-family: var(--font-sans);
     background-color: var(--color-bg);
     color: var(--color-text);
     min-height: 100vh;
-    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
 
-/* Smooth micro-interactions & entrance transitions */
+/* ============================================================================
+   Animaciones del logo Nova
+   ============================================================================ */
+
+/* Halo pulsante suave detras del logo */
+@keyframes novaHaloPulse {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.15);
+  }
+}
+
+.nova-halo {
+  background: radial-gradient(circle at center, rgba(45, 212, 191, 0.6) 0%, transparent 70%);
+  filter: blur(6px);
+  animation: novaHaloPulse 3s ease-in-out infinite;
+}
+
+/* Rotacion muy sutil del logo (gira muy poco, da sensacion de vida) */
+@keyframes novaStarFloat {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(3deg) scale(1.02);
+  }
+}
+
+.nova-star {
+  animation: novaStarFloat 5s ease-in-out infinite;
+  transition: filter 0.3s ease;
+}
+
+.nova-star:hover {
+  filter: drop-shadow(0 0 12px rgba(45, 212, 191, 0.6));
+}
+
+/* Logo clickeable */
+.nova-logo-button {
+  background: transparent;
+  border: none;
+  padding: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.nova-logo-button:hover {
+  opacity: 0.9;
+}
+
+.nova-logo-button:active {
+  transform: scale(0.98);
+}
+
+.nova-logo-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+/* Respeto por preferencia del usuario de movimiento reducido */
+@media (prefers-reduced-motion: reduce) {
+  .nova-halo,
+  .nova-star,
+  .view-enter {
+    animation: none !important;
+  }
+}
+
+/* ============================================================================
+   Micro-interacciones
+   ============================================================================ */
+
 @keyframes viewFadeIn {
   from {
     opacity: 0;
@@ -78,68 +175,37 @@ html[data-theme="light"], html.light {
 }
 
 .view-enter {
-  animation: viewFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: viewFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Card hover and interactive smoothing */
 .interactive-card {
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s ease;
 }
 
 .interactive-card:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -8px rgba(13, 148, 136, 0.15);
 }
 
 .interactive-pill {
-  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .interactive-pill:active {
   transform: scale(0.97);
 }
 
-/* Accessible reduced-motion compliance */
-@media (prefers-reduced-motion: reduce) {
-  *, ::before, ::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-  .view-enter {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
-  .interactive-card:hover {
-    transform: none !important;
-  }
-  .interactive-pill:active {
-    transform: none !important;
-  }
+/* Transiciones suaves en inputs y selects */
+input, select, textarea {
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Reusable semantic utility classes consuming variables */
-.nova-bg-base { background-color: var(--color-bg); }
-.nova-bg-sidebar { background-color: var(--color-sidebar-bg); }
-.nova-bg-header { background-color: var(--color-header-bg); }
-.nova-bg-surface { background-color: var(--color-surface); }
-.nova-bg-subtle { background-color: var(--color-surface-subtle); }
-.nova-border { border-color: var(--color-border); }
-.nova-border-subtle { border-color: var(--color-border-subtle); }
-.nova-text-main { color: var(--color-text); }
-.nova-text-secondary { color: var(--color-text-secondary); }
-.nova-text-muted { color: var(--color-text-muted); }
-.nova-card {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-card);
-}
-
-/* Custom scrollbars */
+/* Scrollbar refinado */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -148,9 +214,12 @@ html[data-theme="light"], html.light {
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
+  background-clip: content-box;
 }

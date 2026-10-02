@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react';
 import { observarTransacciones } from '../firebase/transactions';
-import { Transaccion, Transaction, TipoMovimiento, CategoriaFinanciera } from '../types/finance';
+import {
+  Transaccion,
+  Transaction,
+  TipoMovimiento,
+  CategoriaFinanciera,
+} from '../types/finance';
 
 // ============================================================================
 // NOVA v0.3.3 - Hook useTransacciones
 // ============================================================================
 // Se suscribe en tiempo real a las transacciones del usuario en Firestore
 // y las mapea al modelo Transaction (legacy) que consumen las vistas.
-//
-// IMPORTANTE: recibe el uid del usuario como parametro. Si es null,
-// no intenta suscribirse (usuario no autenticado).
+
+// ----------------------------------------------------------------------------
+// Mapeo Transaccion (Firestore) -> Transaction (vistas)
+// ----------------------------------------------------------------------------
 
 function tipoALegacy(tipo: TipoMovimiento): 'income' | 'expense' {
   return tipo === 'ingreso' ? 'income' : 'expense';
@@ -17,6 +23,7 @@ function tipoALegacy(tipo: TipoMovimiento): 'income' | 'expense' {
 
 function categoriaALabel(cat: CategoriaFinanciera): string {
   const map: Record<CategoriaFinanciera, string> = {
+    // Categorias de GASTO
     vivienda: 'Housing',
     mercado: 'Groceries',
     transporte: 'Transit & Mobility',
@@ -24,11 +31,22 @@ function categoriaALabel(cat: CategoriaFinanciera): string {
     salud: 'Health & Wellness',
     educacion: 'Education',
     ocio: 'Dining',
-    inversiones: 'Investments',
     suscripciones: 'Utilities',
     deudas: 'General',
-    ahorro: 'Investments',
     otro: 'General',
+
+    // Categorias de INGRESO
+    sueldo: 'Income',
+    freelance: 'Income',
+    ventas: 'Income',
+    regalos: 'Income',
+    inversiones: 'Investments',
+    reembolsos: 'Income',
+    prestamos: 'Income',
+    otros: 'Income',
+
+    // Ahorro
+    ahorro: 'Investments',
   };
   return map[cat] || 'General';
 }
@@ -57,12 +75,16 @@ function mapearTransaccion(t: Transaccion): Transaction {
     amount: t.monto,
     type: tipoALegacy(t.tipo),
     category: categoriaALabel(t.categoria),
-    date: t.fecha.split('T')[0], // YYYY-MM-DD
+    date: t.fecha.split('T')[0],
     paymentMethod: medioPagoALabel(t.medioPago, t.contraparte),
     status: 'completed',
     notes: t.nota,
   };
 }
+
+// ----------------------------------------------------------------------------
+// Hook
+// ----------------------------------------------------------------------------
 
 export interface UseTransaccionesResult {
   transacciones: Transaction[];
@@ -80,7 +102,6 @@ export function useTransacciones(uid: string | null): UseTransaccionesResult {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Si no hay usuario, no hay nada que cargar
     if (!uid) {
       setTransacciones([]);
       setCargando(false);

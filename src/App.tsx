@@ -35,6 +35,10 @@ import { useTransacciones } from './hooks/useTransacciones';
 
 type AuthMode = 'login' | 'register' | 'forgot';
 
+// ---------------------------------------------------------------------------
+// Mapeo del modelo legacy (Transaction, en ingles) al modelo Firestore
+// (Transaccion, en espanol).
+// ---------------------------------------------------------------------------
 function mapearATransaccion(
   tx: Omit<Transaction, 'id'>
 ): Omit<Transaccion, 'id' | 'userId' | 'createdAt' | 'updatedAt'> {
@@ -105,10 +109,11 @@ function AppContent() {
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
   const [addModalInitialType, setAddModalInitialType] = useState<TransactionType>('expense');
 
-  // Summary calculado a partir de transacciones reales + saldo inicial del usuario
+  // Summary calculado a partir de transacciones reales + saldo inicial
   const summary: FinancialSummary = useMemo(() => {
-    const saldoInicialMonto =
-      perfil?.saldoInicial?.configurado ? perfil.saldoInicial.monto : 0;
+    const saldoInicialMonto = perfil?.saldoInicial?.configurado
+      ? perfil.saldoInicial.monto
+      : 0;
 
     const ahora = new Date();
     const mesActual = ahora.getMonth();
@@ -148,8 +153,8 @@ function AppContent() {
     };
   }, [transactions, perfil]);
 
-  // Abre el modal de bienvenida si el usuario esta logueado
-  // pero todavia no configuro su saldo inicial
+  // Abre el modal de bienvenida si el usuario esta logueado pero
+  // todavia no configuro su saldo inicial
   useEffect(() => {
     if (usuario && perfil && perfil.saldoInicial && !perfil.saldoInicial.configurado) {
       setIsWelcomeModalOpen(true);
@@ -299,6 +304,7 @@ function AppContent() {
         <Header
           currentRoute={currentRoute}
           onOpenAddModal={() => handleOpenAddModal('expense')}
+          onNavigate={navigateTo}
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-6xl w-full mx-auto view-enter">
