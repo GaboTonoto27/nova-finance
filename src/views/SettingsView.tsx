@@ -1,20 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Shield,
   Sliders,
   Bell,
   RefreshCw,
   CheckCircle2,
   Lock,
-  Globe,
-  Database,
-  Smartphone,
   Sun,
   Moon,
   Palette,
+  Wallet,
 } from 'lucide-react';
 import { UI_COPY } from '../data/copy';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { actualizarSaldoInicial } from '../firebase/users';
+import { formatCurrency } from '../data/mockData';
 
 interface SettingsViewProps {
   onResetData: () => void;
@@ -22,19 +22,63 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
   const { theme, setTheme } = useTheme();
+  const { usuario, perfil } = useAuth();
+
   const [currency, setCurrency] = useState('COP');
   const [cycleStart, setCycleStart] = useState('1');
   const [notifications, setNotifications] = useState(true);
   const [autoReconcile, setAutoReconcile] = useState(true);
   const [savedToast, setSavedToast] = useState(false);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // Saldo inicial
+  const [saldoInicialInput, setSaldoInicialInput] = useState('');
+  const [savingSaldo, setSavingSaldo] = useState(false);
+  const [saldoError, setSaldoError] = useState<string | null>(null);
+
+  // Cargar saldo inicial actual cuando este disponible el perfil
+  useEffect(() => {
+    if (perfil?.saldoInicial?.configurado) {
+      setSaldoInicialInput(String(perfil.saldoInicial.monto));
+    } else {
+      setSaldoInicialInput('0');
+    }
+  }, [perfil]);
 
   const handleSave = () => {
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 2500);
   };
 
+  const handleSaveSaldo = async () => {
+    if (!usuario) return;
+    setSaldoError(null);
+
+    const monto = parseFloat(saldoInicialInput);
+    if (isNaN(monto) || monto < 0) {
+      setSaldoError('Ingresa un monto valido (mayor o igual a cero).');
+      return;
+    }
+
+    try {
+      setSavingSaldo(true);
+      await actualizarSaldoInicial(usuario.uid, monto, currency);
+      setSuccessToast('Saldo inicial actualizado correctamente.');
+      setTimeout(() => setSuccessToast(null), 3000);
+    } catch (error) {
+      console.error('Error al guardar saldo inicial:', error);
+      setSaldoError('No se pudo guardar. Intenta de nuevo.');
+    } finally {
+      setSavingSaldo(false);
+    }
+  };
+
+  const saldoActual = perfil?.saldoInicial?.configurado
+    ? perfil.saldoInicial.monto
+    : 0;
+
   return (
-    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 max-w-4xl">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 max-w-4xl mx-auto w-full">
       {/* View Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text)]">
@@ -52,7 +96,79 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
         </div>
       )}
 
-      {/* Theme / Appearance Selection */}
+      {successToast && (
+        <div className="flex items-center gap-2 p-3.5 bg-emerald-950/40 border border-emerald-800/60 rounded-2xl text-xs text-emerald-600 dark:text-emerald-300 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
+          <span>{successToast}</span>
+        </div>
+      )}
+
+      {/* Saldo Inicial */}
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-4 shadow-xs transition-colors interactive-card">
+        <div className="border-b border-[var(--color-border)] pb-3">
+          <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-[var(--color-accent)] stroke-[2]" />
+            <span>Saldo inicial</span>
+          </h2>
+          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+            El dinero con el que empiezas. Es la base para calcular tu saldo actual.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 p-4 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)]">
+            <div className="flex-1">
+              <span className="text-xs font-semibold text-[var(--color-text-secondary)] block mb-1">
+                Saldo inicial actual
+              </span>
+              <span className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
+                {formatCurrency(saldoActual)}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
+              Editar saldo inicial
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] font-bold text-base">
+                  $
+                </span>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={saldoInicialInput}
+                  onChange={(e) => setSaldoInicialInput(e.target.value)}
+                  className={`w-full pl-8 pr-4 py-2.5 bg-[var(--color-surface-subtle)] border rounded-2xl text-sm font-bold text-[var(--color-text)] tabular-nums focus:outline-none focus:ring-2 ${
+                    saldoError
+                      ? 'border-rose-500 focus:ring-rose-500/20'
+                      : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
+                  }`}
+                  disabled={savingSaldo}
+                />
+              </div>
+              <button
+                onClick={handleSaveSaldo}
+                disabled={savingSaldo || !saldoInicialInput}
+                className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 active:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 text-xs font-bold rounded-full transition-colors shadow-sm shadow-teal-500/10"
+              >
+                {savingSaldo ? 'Guardando...' : 'Actualizar'}
+              </button>
+            </div>
+            {saldoError && (
+              <p className="text-xs text-rose-500 mt-1.5 font-medium">{saldoError}</p>
+            )}
+            <p className="text-xs text-[var(--color-text-muted)] mt-2">
+              Cambiar este valor recalcula tu saldo disponible en el dashboard.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Theme / Appearance */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-4 shadow-xs transition-colors interactive-card">
         <div className="border-b border-[var(--color-border)] pb-3">
           <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
@@ -60,12 +176,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
             <span>Tema y apariencia</span>
           </h2>
           <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-            Elige el estilo visual con el que te sientas más cómodo
+            Elige el estilo visual con el que te sientas mas comodo
           </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          {/* Dark Theme Option */}
           <button
             type="button"
             onClick={() => setTheme('dark')}
@@ -96,7 +211,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
             </div>
           </button>
 
-          {/* Light Theme Option */}
           <button
             type="button"
             onClick={() => setTheme('light')}
@@ -122,7 +236,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
                 )}
               </div>
               <p className="text-xs text-[var(--color-text-secondary)] mt-1 leading-relaxed">
-                Tarjetas blancas luminosas y alto contraste para leer fácilmente.
+                Tarjetas blancas luminosas y alto contraste para leer facilmente.
               </p>
             </div>
           </button>
@@ -137,7 +251,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
             <span>{UI_COPY.sections.financialConfiguration}</span>
           </h2>
           <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-            Moneda en la que ves tu dinero y día de corte mensual
+            Moneda en la que ves tu dinero y dia de corte mensual
           </p>
         </div>
 
@@ -151,17 +265,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
               onChange={(e) => setCurrency(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-2xl text-xs font-semibold text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
             >
-              <option value="COP">COP ($) — Peso colombiano</option>
-              <option value="USD">USD ($) — Dólar estadounidense</option>
-              <option value="EUR">EUR (€) — Euro</option>
-              <option value="GBP">GBP (£) — Libra esterlina</option>
-              <option value="BRL">BRL (R$) — Real brasileño</option>
+              <option value="COP">COP ($) - Peso colombiano</option>
+              <option value="USD">USD ($) - Dolar estadounidense</option>
+              <option value="EUR">EUR (EUR) - Euro</option>
+              <option value="GBP">GBP (GBP) - Libra esterlina</option>
+              <option value="BRL">BRL (R$) - Real brasileno</option>
             </select>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
-              Día de corte mensual
+              Dia de corte mensual
             </label>
             <select
               value={cycleStart}
@@ -170,7 +284,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
             >
               <option value="1">1 de cada mes (Inicio de mes)</option>
               <option value="15">15 de cada mes (Pago quincenal)</option>
-              <option value="25">25 de cada mes (Pago de nómina)</option>
+              <option value="25">25 de cada mes (Pago de nomina)</option>
             </select>
           </div>
         </div>
@@ -195,7 +309,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
                 Aviso cuando llegues al 90% de un presupuesto
               </span>
               <span className="text-xs text-[var(--color-text-secondary)] block mt-0.5">
-                Te avisaremos antes de que se acabe tu límite en cualquier categoría
+                Te avisaremos antes de que se acabe tu limite en cualquier categoria
               </span>
             </div>
             <input
@@ -209,10 +323,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
           <label className="flex items-center justify-between p-3.5 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors">
             <div>
               <span className="text-xs font-bold text-[var(--color-text)] block">
-                Categorización automática inteligente
+                Categorizacion automatica inteligente
               </span>
               <span className="text-xs text-[var(--color-text-secondary)] block mt-0.5">
-                Detecta automáticamente el tipo de gasto según el nombre del comercio
+                Detecta automaticamente el tipo de gasto segun el nombre del comercio
               </span>
             </div>
             <input
@@ -225,14 +339,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
         </div>
       </div>
 
-      {/* Data Privacy & Trust Notice */}
+      {/* Data Privacy */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-3 shadow-xs transition-colors interactive-card">
         <div className="flex items-center gap-2 text-base font-bold text-[var(--color-text)]">
           <Lock className="w-4 h-4 text-[var(--color-accent)] stroke-[2]" />
           <span>Tu privacidad ante todo</span>
         </div>
         <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] leading-relaxed font-normal">
-          NOVA está diseñada pensando en la seguridad de tu información. Todos tus datos y cuentas residen de forma privada en tu dispositivo local. No compartimos tus movimientos ni usamos rastreadores publicitarios.
+          NOVA esta disenada pensando en la seguridad de tu informacion. Todos tus
+          datos y cuentas residen de forma privada en tu navegador. No compartimos tus
+          movimientos ni usamos rastreadores publicitarios.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">

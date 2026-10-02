@@ -11,6 +11,18 @@ interface TransactionModalProps {
   initialType?: TransactionType;
 }
 
+// Opciones predeterminadas para el medio de pago
+const MEDIOS_PAGO_PREDETERMINADOS = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'nequi', label: 'Nequi' },
+  { value: 'daviplata', label: 'Daviplata' },
+  { value: 'tarjeta_debito', label: 'Tarjeta debito' },
+  { value: 'tarjeta_credito', label: 'Tarjeta credito' },
+  { value: 'transferencia', label: 'Transferencia bancaria' },
+  { value: 'paypal', label: 'PayPal' },
+  { value: 'otro', label: 'Otro (especificar)' },
+];
+
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   isOpen,
   onClose,
@@ -23,7 +35,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Groceries');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [paymentMethod, setPaymentMethod] = useState('Transferencia Bancolombia');
+  const [paymentMethod, setPaymentMethod] = useState('efectivo');
+  const [customPaymentMethod, setCustomPaymentMethod] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -38,17 +51,20 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (!merchant.trim()) {
-      newErrors.merchant = 'Dinos dónde o a quién le pagaste.';
+      newErrors.merchant = 'Dinos donde o a quien le pagaste.';
     }
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       newErrors.amount = 'Ingresa un valor mayor a $0.';
     }
     if (!category) {
-      newErrors.category = 'Selecciona una categoría.';
+      newErrors.category = 'Selecciona una categoria.';
     }
     if (!date) {
       newErrors.date = 'La fecha es obligatoria.';
+    }
+    if (paymentMethod === 'otro' && !customPaymentMethod.trim()) {
+      newErrors.paymentMethod = 'Especifica como pagaste.';
     }
 
     setErrors(newErrors);
@@ -59,6 +75,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     e.preventDefault();
     if (!validate()) return;
 
+    // Si el usuario eligio "Otro", usamos el texto custom
+    const finalPaymentMethod =
+      paymentMethod === 'otro' && customPaymentMethod.trim()
+        ? customPaymentMethod.trim()
+        : MEDIOS_PAGO_PREDETERMINADOS.find((m) => m.value === paymentMethod)?.label ||
+          paymentMethod;
+
     onAddTransaction({
       merchant: merchant.trim(),
       description: description.trim() || merchant.trim(),
@@ -66,7 +89,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       type,
       category,
       date,
-      paymentMethod,
+      paymentMethod: finalPaymentMethod,
       status: 'completed',
     });
 
@@ -75,6 +98,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     setDescription('');
     setAmount('');
     setCategory('Groceries');
+    setPaymentMethod('efectivo');
+    setCustomPaymentMethod('');
     onClose();
   };
 
@@ -93,7 +118,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               {type === 'expense' ? 'Registrar un gasto' : 'Registrar un ingreso'}
             </h2>
             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-              Guarda tus movimientos para tener tus cuentas al día
+              Guarda tus movimientos para tener tus cuentas al dia
             </p>
           </div>
           <button
@@ -107,7 +132,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-          {/* Segmented Type Control - Friendly Pill Tabs */}
+          {/* Segmented Type Control */}
           <div className="flex p-1 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-2xl">
             <button
               type="button"
@@ -146,8 +171,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </span>
               <input
                 type="number"
-                step="1000"
-                min="1"
+                step="any"
+                min="0"
                 placeholder={UI_COPY.forms.amountPlaceholder}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -204,6 +229,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
+          {/* Date & Payment Method */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
@@ -221,16 +247,50 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
                 {UI_COPY.forms.paymentChannel}
               </label>
-              <input
-                type="text"
+              <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                placeholder={UI_COPY.forms.paymentChannelPlaceholder}
-                className="w-full px-3 py-2 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"
-              />
+                className={`w-full px-3 py-2 bg-[var(--color-surface-subtle)] border rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 ${
+                  errors.paymentMethod
+                    ? 'border-rose-500 focus:ring-rose-500/20'
+                    : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
+                }`}
+              >
+                {MEDIOS_PAGO_PREDETERMINADOS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
+          {/* Custom payment method (si elige "Otro") */}
+          {paymentMethod === 'otro' && (
+            <div>
+              <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
+                Especifica como pagaste
+              </label>
+              <input
+                type="text"
+                placeholder="ej. PSE, tarjeta regalo, Bitcoin"
+                value={customPaymentMethod}
+                onChange={(e) => setCustomPaymentMethod(e.target.value)}
+                className={`w-full px-3 py-2 bg-[var(--color-surface-subtle)] border rounded-xl text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 ${
+                  errors.paymentMethod
+                    ? 'border-rose-500 focus:ring-rose-500/20'
+                    : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
+                }`}
+              />
+              {errors.paymentMethod && (
+                <p className="text-xs text-rose-500 mt-1 font-medium">
+                  {errors.paymentMethod}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Note */}
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
               {UI_COPY.forms.note}
