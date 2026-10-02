@@ -6,3 +6,13 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Bun lockfiles (usamos npm)
+bun.lock
+bun.lockb
+
+# AI Studio metadata
+metadata.json

@@ -83,3 +83,29 @@ v1.0 — Producción ⏳ Deploy público
 Gabriel Múnera
 Proyecto personal de ingeniería y ciencias de datos.
 Colombia, 2026.
+
+---
+
+## 🔒 Nota de seguridad
+
+`npm audit` reporta actualmente **4 vulnerabilidades high** provenientes
+de la dependencia transitiva `@grpc/grpc-js`, incluida dentro de
+`firebase@11.x`.
+
+### Análisis
+
+- **No es una vulnerabilidad introducida por NOVA.**
+- **No es explotable en la arquitectura actual** (Firestore se comunica
+  vía HTTPS a través del SDK oficial, no vía gRPC directo).
+- **El fix oficial requiere degradar Firebase de v11 a v9**, lo cual
+  rompería todo el sistema de autenticación y acceso a datos.
+- **La vulnerabilidad afecta configuraciones avanzadas de servidores
+  gRPC con mTLS**, que NOVA no utiliza.
+
+### Decisión
+
+Se documenta y se espera el fix oficial de Google. Se revisará
+periódicamente con `npm audit` y se actualizará cuando Firebase
+incorpore una versión parcheada de `@grpc/grpc-js`.
+
+Documentado el 2026-10-01.
