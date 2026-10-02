@@ -112,7 +112,7 @@ export type CategoriaIngreso =
   | 'prestamos'
   | 'otros';
 
-// Union de todas las categorias (para tipos legacy)
+// Union de todas las categorias
 export type CategoriaFinanciera = CategoriaGasto | CategoriaIngreso | 'ahorro';
 
 export interface Transaccion {
@@ -153,6 +153,45 @@ export interface SaldoInicialConfig {
   moneda: string;
   configurado: boolean;
   actualizadoEn: string;
+}
+
+// ============================================================================
+// Tipos para Presupuestos y Metas (Firestore)
+// ============================================================================
+
+/**
+ * Presupuesto mensual por categoria.
+ * Ruta: /users/{userId}/budgets/{budgetId}
+ */
+export interface Presupuesto {
+  id?: string;
+  userId: string;
+  categoria: CategoriaGasto;
+  limite: number;
+  gastado: number;
+  color: string;
+  iconName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Meta de ahorro personalizada.
+ * Ruta: /users/{userId}/goals/{goalId}
+ */
+export interface MetaAhorro {
+  id?: string;
+  userId: string;
+  nombre: string;
+  montoObjetivo: number;
+  montoActual: number;
+  fechaObjetivo: string;
+  categoria: 'seguridad' | 'inversion' | 'viaje' | 'compra' | 'otro';
+  color: string;
+  iconName: string;
+  completada: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ============================================================================
