@@ -15,7 +15,7 @@ import {
   CircleDollarSign,
 } from 'lucide-react';
 import { Transaction } from '../../types/finance';
-import { formatCurrency } from '../../data/mockData';
+import { formatCurrency } from '../../data/format';
 import { CATEGORY_LABELS } from '../../data/copy';
 
 interface TransactionRowProps {

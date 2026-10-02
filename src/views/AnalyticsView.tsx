@@ -1,25 +1,74 @@
 import React, { useState } from 'react';
 import {
-  BarChart3,
   TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
   Calendar,
   PiggyBank,
   Wallet,
+  BarChart3,
 } from 'lucide-react';
-import { CashFlowMonth } from '../types/finance';
-import { CASH_FLOW_HISTORY, formatCurrency } from '../data/mockData';
-import { UI_COPY, formatMonthEs } from '../data/copy';
+import { formatCurrency } from '../data/format';
+import { formatMonthEs } from '../data/copy';
+
+// ============================================================================
+// TODO Fase 05: calcular CASH_FLOW_HISTORY de datos reales
+// ============================================================================
+interface CashFlowMonth {
+  month: string;
+  income: number;
+  expenses: number;
+  savings: number;
+}
+
+const CASH_FLOW_HISTORY: CashFlowMonth[] = [];
 
 export const AnalyticsView: React.FC = () => {
-  const [activeMonthIndex, setActiveMonthIndex] = useState<number>(CASH_FLOW_HISTORY.length - 1);
+  const [activeMonthIndex, setActiveMonthIndex] = useState<number>(0);
+
+  // ------------------------------------------------------------------------
+  // Estado vacio
+  // ------------------------------------------------------------------------
+  if (CASH_FLOW_HISTORY.length === 0) {
+    return (
+      <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text)]">
+              Estadisticas
+            </h1>
+            <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] mt-1">
+              Aprende como se mueve tu dinero y como evolucionan tus habitos mes a mes
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-8 sm:p-12 text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-teal-500/10 flex items-center justify-center mx-auto">
+            <BarChart3 className="w-8 h-8 text-teal-500" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-[var(--color-text)]">
+              Aun no hay suficientes datos
+            </h2>
+            <p className="text-sm text-[var(--color-text-secondary)] mt-1 max-w-md mx-auto">
+              Registra movimientos durante algunos meses y aca vas a ver tus
+              estadisticas: flujo de dinero, promedios y tendencias.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ------------------------------------------------------------------------
+  // Vista con datos
+  // ------------------------------------------------------------------------
   const activeMonth = CASH_FLOW_HISTORY[activeMonthIndex];
+  const maxCashflow = Math.max(
+    ...CASH_FLOW_HISTORY.map((m) => Math.max(m.income, m.expenses))
+  );
 
-  // Highest income to scale bars
-  const maxCashflow = Math.max(...CASH_FLOW_HISTORY.map((m) => Math.max(m.income, m.expenses)));
-
-  // Averages
   const avgIncome = Math.round(
     CASH_FLOW_HISTORY.reduce((acc, m) => acc + m.income, 0) / CASH_FLOW_HISTORY.length
   );
@@ -27,30 +76,29 @@ export const AnalyticsView: React.FC = () => {
     CASH_FLOW_HISTORY.reduce((acc, m) => acc + m.expenses, 0) / CASH_FLOW_HISTORY.length
   );
   const avgSavings = avgIncome - avgExpenses;
-  const avgSavingsRate = Math.round((avgSavings / avgIncome) * 100);
+  const avgSavingsRate = avgIncome > 0 ? Math.round((avgSavings / avgIncome) * 100) : 0;
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
-      {/* View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text)]">
-            Estadísticas
+            Estadisticas
           </h1>
-          <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] mt-1 font-normal">
-            Aprende cómo se mueve tu dinero y cómo evolucionan tus hábitos mes a mes
+          <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] mt-1">
+            Aprende como se mueve tu dinero y como evolucionan tus habitos mes a mes
           </p>
         </div>
 
         <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] px-3 py-1.5 rounded-full border border-[var(--color-border)]">
           <Calendar className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
-          <span>Últimos 6 meses</span>
+          <span>Ultimos 6 meses</span>
         </div>
       </div>
 
-      {/* Analytics KPI Cards */}
+      {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all interactive-card">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs interactive-card">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-[var(--color-text-secondary)] font-semibold">
               Promedio que te entra
@@ -62,12 +110,12 @@ export const AnalyticsView: React.FC = () => {
           <div className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
             {formatCurrency(avgIncome)}
           </div>
-          <div className="text-xs text-[var(--color-text-muted)] mt-1 font-normal">
+          <div className="text-xs text-[var(--color-text-muted)] mt-1">
             Ingresos promedio al mes
           </div>
         </div>
 
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all interactive-card">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs interactive-card">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-[var(--color-text-secondary)] font-semibold">
               Promedio que gastas
@@ -79,12 +127,12 @@ export const AnalyticsView: React.FC = () => {
           <div className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
             {formatCurrency(avgExpenses)}
           </div>
-          <div className="text-xs text-[var(--color-text-muted)] mt-1 font-normal">
+          <div className="text-xs text-[var(--color-text-muted)] mt-1">
             Gastos promedio al mes
           </div>
         </div>
 
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all interactive-card">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs interactive-card">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-[var(--color-text-secondary)] font-semibold">
               Lo que te queda libre
@@ -96,12 +144,12 @@ export const AnalyticsView: React.FC = () => {
           <div className="text-2xl font-bold text-[var(--color-accent)] tabular-nums">
             {formatCurrency(avgSavings)}
           </div>
-          <div className="text-xs text-[var(--color-text-muted)] mt-1 font-normal">
-            Superávit libre para tus metas
+          <div className="text-xs text-[var(--color-text-muted)] mt-1">
+            Superavit libre para tus metas
           </div>
         </div>
 
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all interactive-card">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs interactive-card">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-[var(--color-text-secondary)] font-semibold">
               Tu ritmo de ahorro
@@ -113,14 +161,14 @@ export const AnalyticsView: React.FC = () => {
           <div className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
             {avgSavingsRate}%
           </div>
-          <div className="text-xs text-[var(--color-text-muted)] mt-1 font-normal">
+          <div className="text-xs text-[var(--color-text-muted)] mt-1">
             De lo que ganas cada mes
           </div>
         </div>
       </div>
 
-      {/* Cash Flow History Visualization */}
-      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-7 space-y-6 shadow-xs transition-colors interactive-card">
+      {/* Grafica */}
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-7 space-y-6 shadow-xs interactive-card">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-bold tracking-tight text-[var(--color-text)]">
@@ -142,12 +190,11 @@ export const AnalyticsView: React.FC = () => {
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
-              <span className="text-[var(--color-text-secondary)]">Te quedó libre</span>
+              <span className="text-[var(--color-text-secondary)]">Libre</span>
             </div>
           </div>
         </div>
 
-        {/* Visual Bar Histogram */}
         <div className="pt-6 pb-2">
           <div className="grid grid-cols-6 gap-2 sm:gap-6 h-56 items-end border-b border-[var(--color-border)] pb-2">
             {CASH_FLOW_HISTORY.map((item, idx) => {
@@ -161,12 +208,12 @@ export const AnalyticsView: React.FC = () => {
                   key={item.month}
                   onClick={() => setActiveMonthIndex(idx)}
                   className={`flex flex-col items-center h-full justify-end cursor-pointer group p-1 sm:p-2 rounded-2xl transition-all ${
-                    isSelected ? 'bg-[var(--color-surface-subtle)] ring-1 ring-[var(--color-accent)]' : 'hover:bg-[var(--color-surface-hover)]'
+                    isSelected
+                      ? 'bg-[var(--color-surface-subtle)] ring-1 ring-[var(--color-accent)]'
+                      : 'hover:bg-[var(--color-surface-hover)]'
                   }`}
                 >
-                  {/* Grouped Bars with rounded tops */}
                   <div className="w-full flex items-end justify-center gap-1 sm:gap-2 h-44">
-                    {/* Income Bar */}
                     <div
                       style={{ height: `${incomeHeight}%` }}
                       className={`w-2.5 sm:w-4 rounded-t-full transition-all ${
@@ -176,7 +223,6 @@ export const AnalyticsView: React.FC = () => {
                       }`}
                       title={`Ingresos: ${formatCurrency(item.income)}`}
                     />
-                    {/* Expense Bar */}
                     <div
                       style={{ height: `${expenseHeight}%` }}
                       className={`w-2.5 sm:w-4 rounded-t-full transition-all ${
@@ -186,7 +232,6 @@ export const AnalyticsView: React.FC = () => {
                       }`}
                       title={`Gastos: ${formatCurrency(item.expenses)}`}
                     />
-                    {/* Net Savings Bar */}
                     <div
                       style={{ height: `${savingsHeight}%` }}
                       className={`w-2.5 sm:w-4 rounded-t-full transition-all ${
@@ -194,11 +239,10 @@ export const AnalyticsView: React.FC = () => {
                           ? 'bg-teal-500 shadow-sm shadow-teal-500/20'
                           : 'bg-teal-500/60 group-hover:bg-teal-500'
                       }`}
-                      title={`Te quedó libre: ${formatCurrency(item.savings)}`}
+                      title={`Libre: ${formatCurrency(item.savings)}`}
                     />
                   </div>
 
-                  {/* Month Label */}
                   <span
                     className={`mt-3 text-xs font-semibold tracking-tight transition-colors ${
                       isSelected
@@ -214,8 +258,7 @@ export const AnalyticsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Selected Month Detail Strip */}
-        <div className="bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
+        <div className="bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-wider text-[var(--color-text-muted)] font-semibold">
               Mes seleccionado:
@@ -227,21 +270,21 @@ export const AnalyticsView: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs tabular-nums font-semibold">
             <div>
-              <span className="text-[var(--color-text-secondary)] mr-1.5 font-normal">Entró:</span>
-              <strong className="text-emerald-600 dark:text-emerald-400">+{formatCurrency(activeMonth.income)}</strong>
+              <span className="text-[var(--color-text-secondary)] mr-1.5 font-normal">Entro:</span>
+              <strong className="text-emerald-600 dark:text-emerald-400">
+                +{formatCurrency(activeMonth.income)}
+              </strong>
             </div>
             <div>
-              <span className="text-[var(--color-text-secondary)] mr-1.5 font-normal">Salió:</span>
-              <strong className="text-rose-600 dark:text-rose-400">-{formatCurrency(activeMonth.expenses)}</strong>
+              <span className="text-[var(--color-text-secondary)] mr-1.5 font-normal">Salio:</span>
+              <strong className="text-rose-600 dark:text-rose-400">
+                -{formatCurrency(activeMonth.expenses)}
+              </strong>
             </div>
             <div>
-              <span className="text-[var(--color-text-secondary)] mr-1.5 font-normal">Te quedó:</span>
-              <strong className="text-[var(--color-accent)]">+{formatCurrency(activeMonth.savings)}</strong>
-            </div>
-            <div>
-              <span className="text-[var(--color-text-secondary)] mr-1.5 font-normal">Ahorraste:</span>
-              <strong className="text-[var(--color-text)]">
-                {Math.round((activeMonth.savings / activeMonth.income) * 100)}%
+              <span className="text-[var(--color-text-secondary)] mr-1.5 font-normal">Quedo:</span>
+              <strong className="text-[var(--color-accent)]">
+                +{formatCurrency(activeMonth.savings)}
               </strong>
             </div>
           </div>

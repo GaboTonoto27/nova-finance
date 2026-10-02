@@ -14,7 +14,7 @@ import { UI_COPY } from '../data/copy';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { actualizarSaldoInicial } from '../firebase/users';
-import { formatCurrency } from '../data/mockData';
+import { formatCurrency } from '../data/format';
 
 interface SettingsViewProps {
   onResetData: () => void;

@@ -3,19 +3,21 @@ import {
   NavigationRoute,
   Transaction,
   FinancialSummary,
-  BudgetCategory,
   TransactionType,
   Transaccion,
   TipoMovimiento,
   CategoriaFinanciera,
   Moneda,
+  Presupuesto,
+  MetaAhorro,
 } from './types/finance';
-import { INITIAL_BUDGETS, INITIAL_GOALS } from './data/mockData';
 import { Sidebar } from './components/common/Sidebar';
 import { MobileNav } from './components/common/MobileNav';
 import { Header } from './components/common/Header';
 import { TransactionModal } from './components/common/TransactionModal';
 import { WelcomeModal } from './components/common/WelcomeModal';
+import { PresupuestoModal } from './components/common/PresupuestoModal';
+import { MetaModal } from './components/common/MetaModal';
 import { NovaLogo } from './components/common/NovaLogo';
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
@@ -31,7 +33,21 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { crearTransaccion } from './firebase/transactions';
 import { actualizarSaldoInicial } from './firebase/users';
+import {
+  crearPresupuesto,
+  actualizarPresupuesto,
+  eliminarPresupuesto,
+  crearPresupuestosIniciales,
+} from './firebase/presupuestos';
+import {
+  crearMeta,
+  actualizarMeta,
+  eliminarMeta,
+} from './firebase/metas';
 import { useTransacciones } from './hooks/useTransacciones';
+import { usePresupuestos } from './hooks/usePresupuestos';
+import { useMetas } from './hooks/useMetas';
+import { CATEGORY_LABELS } from './data/copy';
 
 type AuthMode = 'login' | 'register' | 'forgot';
 
@@ -98,16 +114,32 @@ function AppContent() {
     return validRoutes.includes(hash) ? hash : 'dashboard';
   });
 
+  // Hooks de Firestore
   const {
     transacciones: transactions,
     cargando: cargandoTransacciones,
-    error: errorTransacciones,
   } = useTransacciones(usuario?.uid ?? null);
 
-  const [budgets] = useState<BudgetCategory[]>(INITIAL_BUDGETS);
+  const {
+    presupuestos,
+    cargando: cargandoPresupuestos,
+  } = usePresupuestos(usuario?.uid ?? null);
+
+  const {
+    metas,
+    cargando: cargandoMetas,
+  } = useMetas(usuario?.uid ?? null);
+
+  // Estados de modales
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
   const [addModalInitialType, setAddModalInitialType] = useState<TransactionType>('expense');
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
+
+  const [isPresupuestoModalOpen, setIsPresupuestoModalOpen] = useState(false);
+  const [presupuestoEditar, setPresupuestoEditar] = useState<Presupuesto | null>(null);
+
+  const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
+  const [metaEditar, setMetaEditar] = useState<MetaAhorro | null>(null);
 
   // Summary calculado a partir de transacciones reales + saldo inicial
   const summary: FinancialSummary = useMemo(() => {
@@ -163,6 +195,21 @@ function AppContent() {
     }
   }, [usuario, perfil]);
 
+  // Auto-crear presupuestos iniciales cuando un usuario esta logueado,
+  // tiene saldo inicial configurado y no tiene ningun presupuesto
+  useEffect(() => {
+    if (
+      usuario &&
+      perfil?.saldoInicial?.configurado &&
+      !cargandoPresupuestos &&
+      presupuestos.length === 0
+    ) {
+      crearPresupuestosIniciales().catch((err) => {
+        console.error('Error al crear presupuestos iniciales:', err);
+      });
+    }
+  }, [usuario, perfil, cargandoPresupuestos, presupuestos.length]);
+
   const handleOpenAddModal = (type: TransactionType = 'expense') => {
     setAddModalInitialType(type);
     setIsAddModalOpen(true);
@@ -208,6 +255,9 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [usuario]);
 
+  // ------------------------------------------------------------------------
+  // Transacciones
+  // ------------------------------------------------------------------------
   const handleAddTransaction = async (newTxData: Omit<Transaction, 'id'>) => {
     try {
       const transaccionPayload = mapearATransaccion(newTxData);
@@ -222,6 +272,142 @@ function AppContent() {
     }
   };
 
+  // ------------------------------------------------------------------------
+  // Presupuestos
+  // ------------------------------------------------------------------------
+  const handleNuevoPresupuesto = () => {
+    setPresupuestoEditar(null);
+    setIsPresupuestoModalOpen(true);
+  };
+
+  const handleEditarPresupuesto = (p: Presupuesto) => {
+    setPresupuestoEditar(p);
+    setIsPresupuestoModalOpen(true);
+  };
+
+  const handleGuardarPresupuesto = async (data: {
+    categoria: Presupuesto['categoria'];
+    limite: number;
+    color: string;
+    iconName: string;
+  }) => {
+    if (presupuestoEditar && presupuestoEditar.id) {
+      await actualizarPresupuesto(presupuestoEditar.id, {
+        limite: data.limite,
+        color: data.color,
+        iconName: data.iconName,
+      });
+    } else {
+      await crearPresupuesto({
+        categoria: data.categoria,
+        limite: data.limite,
+        gastado: 0,
+        color: data.color,
+        iconName: data.iconName,
+      });
+    }
+  };
+
+  const handleEliminarPresupuesto = async (p: Presupuesto) => {
+    if (!p.id) return;
+    const nombre = CATEGORY_LABELS[p.categoria] || p.categoria;
+    const confirmado = window.confirm(
+      `Eliminar el presupuesto de "${nombre}"?\n\nEsta accion no se puede deshacer.`
+    );
+    if (!confirmado) return;
+
+    try {
+      await eliminarPresupuesto(p.id);
+    } catch (error) {
+      console.error('Error al eliminar presupuesto:', error);
+      alert('No se pudo eliminar el presupuesto.');
+    }
+  };
+
+  const categoriasPresupuestoUsadas = useMemo(
+    () => presupuestos.map((p) => p.categoria),
+    [presupuestos]
+  );
+
+  // ------------------------------------------------------------------------
+  // Metas
+  // ------------------------------------------------------------------------
+  const handleNuevaMeta = () => {
+    setMetaEditar(null);
+    setIsMetaModalOpen(true);
+  };
+
+  const handleEditarMeta = (m: MetaAhorro) => {
+    setMetaEditar(m);
+    setIsMetaModalOpen(true);
+  };
+
+  const handleGuardarMeta = async (data: {
+    nombre: string;
+    montoObjetivo: number;
+    fechaObjetivo: string;
+    categoria: MetaAhorro['categoria'];
+    color: string;
+    iconName: string;
+  }) => {
+    if (metaEditar && metaEditar.id) {
+      await actualizarMeta(metaEditar.id, {
+        nombre: data.nombre,
+        montoObjetivo: data.montoObjetivo,
+        fechaObjetivo: data.fechaObjetivo,
+        categoria: data.categoria,
+        color: data.color,
+        iconName: data.iconName,
+      });
+    } else {
+      await crearMeta({
+        nombre: data.nombre,
+        montoObjetivo: data.montoObjetivo,
+        montoActual: 0,
+        fechaObjetivo: data.fechaObjetivo,
+        categoria: data.categoria,
+        color: data.color,
+        iconName: data.iconName,
+        completada: false,
+      });
+    }
+  };
+
+  const handleEliminarMeta = async (m: MetaAhorro) => {
+    if (!m.id) return;
+    const confirmado = window.confirm(
+      `Eliminar la meta "${m.nombre}"?\n\nEsta accion no se puede deshacer.`
+    );
+    if (!confirmado) return;
+
+    try {
+      await eliminarMeta(m.id);
+    } catch (error) {
+      console.error('Error al eliminar meta:', error);
+      alert('No se pudo eliminar la meta.');
+    }
+  };
+
+  const handleAbonarMeta = async (m: MetaAhorro, monto: number) => {
+    if (!m.id) return;
+    const nuevoMonto = Math.min(m.montoObjetivo, m.montoActual + monto);
+    const completada = nuevoMonto >= m.montoObjetivo;
+    await actualizarMeta(m.id, {
+      montoActual: nuevoMonto,
+      completada,
+    });
+  };
+
+  // ------------------------------------------------------------------------
+  // Reset
+  // ------------------------------------------------------------------------
+  const handleResetData = () => {
+    alert('Funcionalidad de reset en desarrollo. Se implementara proximamente.');
+  };
+
+  // ------------------------------------------------------------------------
+  // Saldo inicial
+  // ------------------------------------------------------------------------
   const handleConfirmSaldoInicial = async (monto: number) => {
     if (!usuario) return;
     try {
@@ -233,10 +419,9 @@ function AppContent() {
     }
   };
 
-  const handleResetData = () => {
-    alert('Funcionalidad en desarrollo. Se implementara en la Fase 03.4.');
-  };
-
+  // ------------------------------------------------------------------------
+  // Loading
+  // ------------------------------------------------------------------------
   if (cargando) {
     return (
       <div className="min-h-screen bg-[var(--color-bg)] flex flex-col items-center justify-center p-6 text-[var(--color-text)] transition-colors">
@@ -312,8 +497,10 @@ function AppContent() {
             <DashboardView
               summary={summary}
               transactions={transactions}
-              budgets={budgets}
-              goals={INITIAL_GOALS}
+              presupuestos={presupuestos}
+              metas={metas}
+              cargandoPresupuestos={cargandoPresupuestos}
+              cargandoMetas={cargandoMetas}
               onOpenAddModal={handleOpenAddModal}
               onNavigate={navigateTo}
             />
@@ -328,12 +515,24 @@ function AppContent() {
 
           {currentRoute === 'budgets' && (
             <BudgetsView
-              budgets={budgets}
-              onOpenAddModal={() => handleOpenAddModal('expense')}
+              presupuestos={presupuestos}
+              cargando={cargandoPresupuestos}
+              onNuevoPresupuesto={handleNuevoPresupuesto}
+              onEditarPresupuesto={handleEditarPresupuesto}
+              onEliminarPresupuesto={handleEliminarPresupuesto}
             />
           )}
 
-          {currentRoute === 'goals' && <GoalsView goals={INITIAL_GOALS} />}
+          {currentRoute === 'goals' && (
+            <GoalsView
+              metas={metas}
+              cargando={cargandoMetas}
+              onNuevaMeta={handleNuevaMeta}
+              onEditarMeta={handleEditarMeta}
+              onEliminarMeta={handleEliminarMeta}
+              onAbonarMeta={handleAbonarMeta}
+            />
+          )}
 
           {currentRoute === 'analytics' && <AnalyticsView />}
 
@@ -360,6 +559,27 @@ function AppContent() {
         isOpen={isWelcomeModalOpen}
         nombreUsuario={perfil?.nombre || 'Usuario'}
         onConfirm={handleConfirmSaldoInicial}
+      />
+
+      <PresupuestoModal
+        isOpen={isPresupuestoModalOpen}
+        onClose={() => {
+          setIsPresupuestoModalOpen(false);
+          setPresupuestoEditar(null);
+        }}
+        onSave={handleGuardarPresupuesto}
+        presupuestoEditar={presupuestoEditar}
+        categoriasYaUsadas={categoriasPresupuestoUsadas}
+      />
+
+      <MetaModal
+        isOpen={isMetaModalOpen}
+        onClose={() => {
+          setIsMetaModalOpen(false);
+          setMetaEditar(null);
+        }}
+        onSave={handleGuardarMeta}
+        metaEditar={metaEditar}
       />
     </div>
   );

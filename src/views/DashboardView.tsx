@@ -4,7 +4,6 @@ import {
   ArrowDownRight,
   Plus,
   ArrowRight,
-  Target,
   Sparkles,
   ShoppingBag,
   Home,
@@ -15,20 +14,32 @@ import {
   Receipt,
   PiggyBank,
   CheckCircle2,
+  BookOpen,
+  Repeat,
+  CreditCard,
+  MoreHorizontal,
+  Shield,
+  TrendingUp,
+  Plane,
+  ShoppingCart,
+  GraduationCap,
+  Heart,
+  Star,
+  Target,
 } from 'lucide-react';
 import {
-  BudgetCategory,
   FinancialSummary,
-  SavingsGoal,
   Transaction,
   NavigationRoute,
   TransactionType,
+  Presupuesto,
+  MetaAhorro,
 } from '../types/finance';
 import { TransactionRow } from '../components/common/TransactionRow';
-import { formatCurrency } from '../data/mockData';
+import { formatCurrency } from '../data/format';
 import {
   UI_COPY,
-  BUDGET_LABELS,
+  CATEGORY_LABELS,
   getTimeGreeting,
   getFinancialMood,
 } from '../data/copy';
@@ -37,22 +48,40 @@ import { useAuth } from '../context/AuthContext';
 interface DashboardViewProps {
   summary: FinancialSummary;
   transactions: Transaction[];
-  budgets: BudgetCategory[];
-  goals: SavingsGoal[];
+  presupuestos: Presupuesto[];
+  metas: MetaAhorro[];
+  cargandoPresupuestos: boolean;
+  cargandoMetas: boolean;
   onOpenAddModal: (type?: TransactionType) => void;
   onNavigate: (route: NavigationRoute) => void;
 }
 
-const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  'Housing & Residence': Home,
-  'Groceries & Dining': ShoppingBag,
-  'Technology & Cloud': Laptop,
-  'Health & Wellness': HeartPulse,
-  'Transit & Mobility': Car,
-  'Culture & Equipment': Utensils,
+const PRESUPUESTO_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Home: Home,
+  ShoppingBag: ShoppingBag,
+  Car: Car,
+  Laptop: Laptop,
+  HeartPulse: HeartPulse,
+  Utensils: Utensils,
+  BookOpen: BookOpen,
+  Repeat: Repeat,
+  CreditCard: CreditCard,
+  MoreHorizontal: MoreHorizontal,
 };
 
-// Estilos por tono del mensaje motivador
+const META_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Shield: Shield,
+  TrendingUp: TrendingUp,
+  Plane: Plane,
+  ShoppingCart: ShoppingCart,
+  Home: Home,
+  Car: Car,
+  GraduationCap: GraduationCap,
+  Heart: Heart,
+  Star: Star,
+  Target: Target,
+};
+
 const MOOD_STYLES: Record<
   'excellent' | 'good' | 'warning' | 'alert' | 'neutral',
   string
@@ -67,8 +96,10 @@ const MOOD_STYLES: Record<
 export const DashboardView: React.FC<DashboardViewProps> = ({
   summary,
   transactions,
-  budgets,
-  goals,
+  presupuestos,
+  metas,
+  cargandoPresupuestos,
+  cargandoMetas,
   onOpenAddModal,
   onNavigate,
 }) => {
@@ -81,7 +112,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const greetingBase = getTimeGreeting();
   const greeting = `${greetingBase}, ${primerNombre}`;
 
-  // Mensaje motivador segun estado financiero
   const mood = getFinancialMood(
     summary.savingsRate,
     summary.monthlyIncome,
@@ -91,14 +121,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const recentTransactions = transactions.slice(0, 5);
 
-  const totalAllocated = budgets.reduce((acc, b) => acc + b.allocated, 0);
-  const totalSpent = budgets.reduce((acc, b) => acc + b.spent, 0);
+  const totalAllocated = presupuestos.reduce((acc, p) => acc + p.limite, 0);
+  const totalSpent = presupuestos.reduce((acc, p) => acc + p.gastado, 0);
   const budgetUtilization =
     totalAllocated > 0 ? Math.round((totalSpent / totalAllocated) * 100) : 0;
 
+  const presupuestosTop = presupuestos
+    .slice()
+    .sort((a, b) => {
+      const aPct = a.limite > 0 ? a.gastado / a.limite : 0;
+      const bPct = b.limite > 0 ? b.gastado / b.limite : 0;
+      return bPct - aPct;
+    })
+    .slice(0, 5);
+
+  const metasTop = metas.slice(0, 3);
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
-      {/* 1. Saludo personal calido con mensaje motivador */}
+      {/* 1. Saludo + mensaje motivador */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--color-text)]">
@@ -117,7 +158,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Protagonista: El saldo disponible */}
+      {/* 2. Saldo disponible */}
       <div className="relative overflow-hidden bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-3xl p-6 sm:p-8 shadow-sm transition-all interactive-card">
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -141,7 +182,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* 3. Ingresos / Gastos / Ahorro */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Ingresos del mes */}
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all interactive-card">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
@@ -161,7 +201,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* En que se fue el dinero */}
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all interactive-card">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
@@ -181,7 +220,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Cuanto estas ahorrando */}
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-xs transition-all sm:col-span-2 lg:col-span-1 interactive-card">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
@@ -238,9 +276,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </button>
       </div>
 
-      {/* 5 y 6. Grid: En que gastaste & Tus Metas */}
+      {/* 5 y 6. Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* 5. En que gastaste */}
+        {/* En que gastaste */}
         <div className="lg:col-span-7 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-5 shadow-xs transition-colors interactive-card">
           <div className="flex items-center justify-between">
             <div>
@@ -248,11 +286,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 En que gastaste
               </h2>
               <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                Usaste el{' '}
-                <strong className="text-[var(--color-text)] font-semibold">
-                  {budgetUtilization}%
-                </strong>{' '}
-                de tu presupuesto este mes
+                {totalAllocated > 0 ? (
+                  <>
+                    Usaste el{' '}
+                    <strong className="text-[var(--color-text)] font-semibold">
+                      {budgetUtilization}%
+                    </strong>{' '}
+                    de tu presupuesto este mes
+                  </>
+                ) : (
+                  'Aun no definiste limites de presupuesto'
+                )}
               </p>
             </div>
             <button
@@ -264,76 +308,108 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           </div>
 
-          {/* Barra segmentada */}
-          <div className="w-full h-3 bg-[var(--color-surface-subtle)] rounded-full overflow-hidden flex gap-1 p-0.5 border border-[var(--color-border)]">
-            {budgets.map((b) => {
-              const widthPct = totalSpent > 0 ? Math.max(4, (b.spent / totalSpent) * 100) : 4;
-              return (
-                <div
-                  key={b.id}
-                  style={{ width: `${widthPct}%`, backgroundColor: b.color }}
-                  className="h-full rounded-full transition-all"
-                  title={`${BUDGET_LABELS[b.name] || b.name}: ${formatCurrency(b.spent)}`}
-                />
-              );
-            })}
-          </div>
-
-          {/* Lista de categorias */}
-          <div className="space-y-3 pt-1">
-            {budgets.map((cat) => {
-              const percent = Math.min(
-                100,
-                Math.round((cat.spent / cat.allocated) * 100)
-              );
-              const isOver = cat.spent > cat.allocated;
-              const Icon = CATEGORY_ICONS[cat.name] || ShoppingBag;
-
-              return (
-                <div
-                  key={cat.id}
-                  className="space-y-1.5 p-2 rounded-xl hover:bg-[var(--color-surface-hover)] transition-colors"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2.5 min-w-0">
+          {cargandoPresupuestos ? (
+            <div className="animate-pulse space-y-3">
+              <div className="h-3 bg-[var(--color-surface-subtle)] rounded" />
+              <div className="h-12 bg-[var(--color-surface-subtle)] rounded" />
+            </div>
+          ) : presupuestos.length === 0 ? (
+            <div className="text-center py-6 space-y-3">
+              <div className="w-12 h-12 rounded-full bg-teal-500/10 flex items-center justify-center mx-auto">
+                <ShoppingBag className="w-6 h-6 text-teal-500" />
+              </div>
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Crea tu primer presupuesto para ver el desglose.
+              </p>
+              <button
+                onClick={() => onNavigate('budgets')}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold rounded-full transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Crear presupuesto</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              {totalSpent > 0 && (
+                <div className="w-full h-3 bg-[var(--color-surface-subtle)] rounded-full overflow-hidden flex gap-1 p-0.5 border border-[var(--color-border)]">
+                  {presupuestos.map((p) => {
+                    const widthPct = Math.max(4, (p.gastado / totalSpent) * 100);
+                    return (
                       <div
-                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
-                      >
-                        <Icon className="w-3.5 h-3.5 stroke-[2]" />
-                      </div>
-                      <span className="font-semibold text-[var(--color-text)] truncate">
-                        {BUDGET_LABELS[cat.name] || cat.name}
-                      </span>
-                    </div>
-                    <div className="text-right shrink-0 tabular-nums">
-                      <span className="font-bold text-[var(--color-text)]">
-                        {formatCurrency(cat.spent)}
-                      </span>
-                      <span className="text-[var(--color-text-muted)] text-[11px] ml-1">
-                        / {formatCurrency(cat.allocated)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="w-full h-2 bg-[var(--color-surface-subtle)] rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        isOver ? 'bg-rose-500' : ''
-                      }`}
-                      style={{
-                        width: `${percent}%`,
-                        backgroundColor: isOver ? '#EF4444' : cat.color,
-                      }}
-                    />
-                  </div>
+                        key={p.id}
+                        style={{ width: `${widthPct}%`, backgroundColor: p.color }}
+                        className="h-full rounded-full transition-all"
+                        title={`${CATEGORY_LABELS[p.categoria] || p.categoria}: ${formatCurrency(p.gastado)}`}
+                      />
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              )}
+
+              <div className="space-y-3 pt-1">
+                {presupuestosTop.map((cat) => {
+                  const percent =
+                    cat.limite > 0
+                      ? Math.min(100, Math.round((cat.gastado / cat.limite) * 100))
+                      : 0;
+                  const isOver = cat.limite > 0 && cat.gastado > cat.limite;
+                  const Icon = PRESUPUESTO_ICONS[cat.iconName] || ShoppingBag;
+
+                  return (
+                    <div
+                      key={cat.id}
+                      className="space-y-1.5 p-2 rounded-xl hover:bg-[var(--color-surface-hover)] transition-colors"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                            style={{
+                              backgroundColor: `${cat.color}20`,
+                              color: cat.color,
+                            }}
+                          >
+                            <Icon className="w-3.5 h-3.5 stroke-[2]" />
+                          </div>
+                          <span className="font-semibold text-[var(--color-text)] truncate">
+                            {CATEGORY_LABELS[cat.categoria] || cat.categoria}
+                          </span>
+                        </div>
+                        <div className="text-right shrink-0 tabular-nums">
+                          <span className="font-bold text-[var(--color-text)]">
+                            {formatCurrency(cat.gastado)}
+                          </span>
+                          {cat.limite > 0 && (
+                            <span className="text-[var(--color-text-muted)] text-[11px] ml-1">
+                              / {formatCurrency(cat.limite)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {cat.limite > 0 && (
+                        <div className="w-full h-2 bg-[var(--color-surface-subtle)] rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              isOver ? 'bg-rose-500' : ''
+                            }`}
+                            style={{
+                              width: `${percent}%`,
+                              backgroundColor: isOver ? '#EF4444' : cat.color,
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* 6. Tus metas */}
+        {/* Tus metas */}
         <div className="lg:col-span-5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 flex flex-col justify-between space-y-5 shadow-xs transition-colors interactive-card">
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -354,57 +430,86 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             </div>
 
-            <div className="space-y-3.5">
-              {goals.map((goal) => {
-                const percent = Math.min(
-                  100,
-                  Math.round((goal.currentAmount / goal.targetAmount) * 100)
-                );
-                return (
-                  <div
-                    key={goal.id}
-                    className="p-4 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] space-y-2.5 hover:border-[var(--color-accent-border)] transition-colors"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: goal.color }}
-                        />
-                        <span className="font-bold text-[var(--color-text)]">
-                          {goal.name}
+            {cargandoMetas ? (
+              <div className="animate-pulse space-y-3">
+                <div className="h-20 bg-[var(--color-surface-subtle)] rounded-2xl" />
+                <div className="h-20 bg-[var(--color-surface-subtle)] rounded-2xl" />
+              </div>
+            ) : metas.length === 0 ? (
+              <div className="text-center py-6 space-y-3">
+                <div className="w-12 h-12 rounded-full bg-teal-500/10 flex items-center justify-center mx-auto">
+                  <Target className="w-6 h-6 text-teal-500" />
+                </div>
+                <p className="text-sm text-[var(--color-text-secondary)]">
+                  Aun no tienes metas. Crea la primera!
+                </p>
+                <button
+                  onClick={() => onNavigate('goals')}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold rounded-full transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Crear meta</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {metasTop.map((meta) => {
+                  const percent = Math.min(
+                    100,
+                    Math.round((meta.montoActual / meta.montoObjetivo) * 100)
+                  );
+                  const Icon = META_ICONS[meta.iconName] || Target;
+                  return (
+                    <div
+                      key={meta.id}
+                      className="p-4 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] space-y-2.5 hover:border-[var(--color-accent-border)] transition-colors"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div
+                            className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                            style={{
+                              backgroundColor: `${meta.color}20`,
+                              color: meta.color,
+                            }}
+                          >
+                            <Icon className="w-3 h-3 stroke-[2]" />
+                          </div>
+                          <span className="font-bold text-[var(--color-text)] truncate">
+                            {meta.nombre}
+                          </span>
+                        </div>
+                        <span className="font-bold text-[var(--color-accent)] tabular-nums shrink-0">
+                          {percent}%
                         </span>
                       </div>
-                      <span className="font-bold text-[var(--color-accent)] tabular-nums">
-                        {percent}%
-                      </span>
-                    </div>
 
-                    <div className="w-full h-2.5 bg-[var(--color-border)] rounded-full overflow-hidden p-0.5">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${percent}%`,
-                          backgroundColor: goal.color,
-                        }}
-                      />
-                    </div>
+                      <div className="w-full h-2.5 bg-[var(--color-border)] rounded-full overflow-hidden p-0.5">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${percent}%`,
+                            backgroundColor: meta.color,
+                          }}
+                        />
+                      </div>
 
-                    <div className="flex items-center justify-between text-xs tabular-nums text-[var(--color-text-secondary)]">
-                      <span>
-                        Llevas{' '}
-                        <strong className="text-[var(--color-text)] font-semibold">
-                          {formatCurrency(goal.currentAmount)}
-                        </strong>
-                      </span>
-                      <span className="text-[var(--color-text-muted)]">
-                        Meta: {formatCurrency(goal.targetAmount)}
-                      </span>
+                      <div className="flex items-center justify-between text-xs tabular-nums text-[var(--color-text-secondary)]">
+                        <span>
+                          Llevas{' '}
+                          <strong className="text-[var(--color-text)] font-semibold">
+                            {formatCurrency(meta.montoActual)}
+                          </strong>
+                        </span>
+                        <span className="text-[var(--color-text-muted)]">
+                          Meta: {formatCurrency(meta.montoObjetivo)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-start gap-3">

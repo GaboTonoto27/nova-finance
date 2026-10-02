@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Check, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { Transaction, TransactionType } from '../../types/finance';
-import { CATEGORIAS_GASTO, CATEGORIAS_INGRESO } from '../../data/mockData';
+import { CATEGORIAS_GASTO, CATEGORIAS_INGRESO } from '../../data/categorias';
 
 interface TransactionModalProps {
   isOpen: boolean;

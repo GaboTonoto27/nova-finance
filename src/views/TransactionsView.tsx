@@ -1,16 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import {
   Search,
-  Filter,
   Download,
   Plus,
-  ArrowUpDown,
   CheckCircle2,
 } from 'lucide-react';
 import { Transaction, TransactionType } from '../types/finance';
 import { TransactionRow } from '../components/common/TransactionRow';
-import { AVAILABLE_CATEGORIES, formatCurrency } from '../data/mockData';
+import { formatCurrency } from '../data/format';
 import { UI_COPY, CATEGORY_LABELS } from '../data/copy';
+
+// Categorias disponibles para el filtro (todas las que tienen label)
+const AVAILABLE_CATEGORIES = Object.keys(CATEGORY_LABELS);
 
 interface TransactionsViewProps {
   transactions: Transaction[];
@@ -27,20 +28,17 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc'>('date-desc');
   const [exportedToast, setExportedToast] = useState(false);
 
-  // Filter and sort transactions
+  // Filtro y orden
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter((tx) => {
-        // Search term
         const matchesSearch =
           tx.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
           tx.merchant.toLowerCase().includes(searchTerm.toLowerCase()) ||
           tx.paymentMethod.toLowerCase().includes(searchTerm.toLowerCase());
 
-        // Type filter
         const matchesType = selectedType === 'all' || tx.type === selectedType;
 
-        // Category filter
         const matchesCategory =
           selectedCategory === 'all' || tx.category === selectedCategory;
 
@@ -54,7 +52,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       });
   }, [transactions, searchTerm, selectedType, selectedCategory, sortBy]);
 
-  // Aggregate stats for filtered set
+  // Totales filtrados
   const totalInflow = filteredTransactions
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
@@ -64,8 +62,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     .reduce((sum, t) => sum + t.amount, 0);
 
   const handleExportCSV = () => {
-    // Generate simple CSV client-side
-    const headers = ['Fecha', 'Comercio', 'Descripcion', 'Tipo', 'Categoria', 'Monto', 'MedioDePago', 'Estado'];
+    const headers = [
+      'Fecha',
+      'Comercio',
+      'Descripcion',
+      'Tipo',
+      'Categoria',
+      'Monto',
+      'MedioDePago',
+      'Estado',
+    ];
     const rows = filteredTransactions.map((tx) => [
       tx.date,
       `"${tx.merchant.replace(/"/g, '""')}"`,
@@ -76,11 +82,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       `"${tx.paymentMethod.replace(/"/g, '""')}"`,
       tx.status,
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `nova_movimientos_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute(
+      'download',
+      `nova_movimientos_${new Date().toISOString().split('T')[0]}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -91,13 +102,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      {/* View Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text)]">
             Movimientos
           </h1>
-          <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] mt-1 font-normal">
+          <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] mt-1">
             Historial de todo lo que entra y sale de tus cuentas
           </p>
         </div>
@@ -123,16 +134,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       </div>
 
       {exportedToast && (
-        <div className="flex items-center gap-2 p-3 bg-teal-950/40 border border-teal-800/60 rounded-xl text-xs text-teal-600 dark:text-teal-300 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 shrink-0 text-teal-500 dark:text-teal-400" />
+        <div className="flex items-center gap-2 p-3 bg-teal-500/10 border border-teal-500/30 rounded-xl text-xs text-teal-700 dark:text-teal-300 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>Reporte descargado exitosamente.</span>
         </div>
       )}
 
-      {/* Filter and Control Bar */}
+      {/* Filtros */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-4 space-y-3.5 shadow-xs transition-colors">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-          {/* Search Input */}
+          {/* Buscador */}
           <div className="md:col-span-5 relative">
             <Search className="w-4 h-4 text-[var(--color-text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
@@ -144,7 +155,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             />
           </div>
 
-          {/* Type Segmented Filter */}
+          {/* Tipo */}
           <div className="md:col-span-3 flex p-1 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl">
             <button
               onClick={() => setSelectedType('all')}
@@ -178,7 +189,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </button>
           </div>
 
-          {/* Category Dropdown */}
+          {/* Categoria */}
           <div className="md:col-span-2">
             <select
               value={selectedCategory}
@@ -194,11 +205,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </select>
           </div>
 
-          {/* Sort By */}
+          {/* Ordenar */}
           <div className="md:col-span-2">
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              onChange={(e) =>
+                setSortBy(e.target.value as 'date-desc' | 'date-asc' | 'amount-desc')
+              }
               className="w-full px-3 py-2.5 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
             >
               <option value="date-desc">{UI_COPY.forms.newestFirst}</option>
@@ -208,11 +221,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </div>
         </div>
 
-        {/* Filter Summary Row */}
+        {/* Resumen filtros */}
         <div className="flex flex-wrap items-center justify-between text-xs text-[var(--color-text-secondary)] pt-2 border-t border-[var(--color-border)]">
           <div className="flex items-center gap-2">
             <span>
-              Tienes <strong className="text-[var(--color-text)] font-semibold">{filteredTransactions.length}</strong> movimientos
+              Tienes{' '}
+              <strong className="text-[var(--color-text)] font-semibold">
+                {filteredTransactions.length}
+              </strong>{' '}
+              movimientos
             </span>
             {(searchTerm || selectedType !== 'all' || selectedCategory !== 'all') && (
               <button
@@ -230,26 +247,41 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
           <div className="flex items-center gap-4 text-xs tabular-nums mt-1 sm:mt-0 font-medium">
             <span>
-              Entró:{' '}
-              <strong className="text-emerald-600 dark:text-emerald-400">+{formatCurrency(totalInflow)}</strong>
+              Entro:{' '}
+              <strong className="text-emerald-600 dark:text-emerald-400">
+                +{formatCurrency(totalInflow)}
+              </strong>
             </span>
-            <span aria-hidden="true" className="text-[var(--color-text-muted)]">·</span>
+            <span aria-hidden="true" className="text-[var(--color-text-muted)]">
+              ·
+            </span>
             <span>
-              Salió:{' '}
-              <strong className="text-[var(--color-text)]">-{formatCurrency(totalOutflow)}</strong>
+              Salio:{' '}
+              <strong className="text-[var(--color-text)]">
+                -{formatCurrency(totalOutflow)}
+              </strong>
             </span>
           </div>
         </div>
       </div>
 
-      {/* Transactions List */}
+      {/* Lista */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-4 sm:p-6 shadow-xs transition-colors">
         {filteredTransactions.length === 0 ? (
           <div className="text-center py-12 px-4 space-y-3">
-            {/* Friendly SVG illustration */}
             <div className="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center mx-auto text-[var(--color-accent)]">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              <svg
+                className="w-8 h-8"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.5"
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
               </svg>
             </div>
             <h3 className="text-base font-bold text-[var(--color-text)]">
