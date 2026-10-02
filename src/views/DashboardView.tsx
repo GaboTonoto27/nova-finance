@@ -247,24 +247,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* 4. Accesos rapidos */}
       <div className="flex flex-wrap items-center gap-2.5 pt-1">
+        {/* Boton REGISTRAR GASTO - ROJO */}
         <button
           onClick={() => onOpenAddModal('expense')}
           type="button"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 text-xs font-bold rounded-full transition-all shadow-sm shadow-teal-500/10 interactive-pill"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-500 hover:bg-rose-400 active:bg-rose-600 text-white text-xs font-bold rounded-full transition-all shadow-sm shadow-rose-500/20 interactive-pill"
         >
           <ArrowDownRight className="w-4 h-4 stroke-[2.5]" />
           <span>{UI_COPY.actions.addExpense}</span>
         </button>
 
+        {/* Boton REGISTRAR INGRESO - VERDE */}
         <button
           onClick={() => onOpenAddModal('income')}
           type="button"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text)] text-xs font-semibold rounded-full transition-all shadow-xs interactive-pill"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white text-xs font-bold rounded-full transition-all shadow-sm shadow-emerald-500/20 interactive-pill"
         >
-          <ArrowUpRight className="w-4 h-4 text-emerald-500 stroke-[2.5]" />
+          <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
           <span>{UI_COPY.actions.addIncome}</span>
         </button>
 
+        {/* Boton VER MOVIMIENTOS - neutro */}
         <button
           onClick={() => onNavigate('transactions')}
           type="button"
@@ -558,7 +561,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button
               onClick={() => onOpenAddModal('expense')}
               type="button"
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold rounded-full transition-all shadow-sm shadow-teal-500/10 interactive-pill"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-500 hover:bg-rose-400 active:bg-rose-600 text-white text-xs font-bold rounded-full transition-all shadow-sm shadow-rose-500/20 interactive-pill"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
               <span>Registrar mi primer movimiento</span>
