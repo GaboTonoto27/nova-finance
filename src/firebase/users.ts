@@ -10,6 +10,12 @@ export interface PerfilUsuario {
   createdAt: string;
   updatedAt: string;
   fotoURL?: string;
+  saldoInicial?: {
+    monto: number;
+    moneda: string;
+    configurado: boolean;
+    actualizadoEn: string;
+  };
 }
 
 export enum OperationType {
@@ -66,7 +72,7 @@ export function handleFirestoreError(
 }
 
 /**
- * Obtiene el perfil de un usuario desde la colección /users/{uid} en Firestore
+ * Obtiene el perfil de un usuario desde la coleccion /users/{uid} en Firestore
  */
 export async function obtenerPerfilUsuario(uid: string): Promise<PerfilUsuario | null> {
   assertFirebaseConfigured();
@@ -85,8 +91,7 @@ export async function obtenerPerfilUsuario(uid: string): Promise<PerfilUsuario |
 
 /**
  * Asegura la existencia del documento /users/{uid} en Firestore.
- * Solo lo crea la primera vez con los valores por defecto (moneda: 'COP', idioma: 'es').
- * En sesiones posteriores únicamente lee el documento existente.
+ * Solo lo crea la primera vez con los valores por defecto.
  */
 export async function asegurarDocumentoUsuario(
   uid: string,
@@ -102,7 +107,6 @@ export async function asegurarDocumentoUsuario(
       return snap.data() as PerfilUsuario;
     }
 
-    // Creación por primera vez
     const now = new Date().toISOString();
     const nuevoPerfil: PerfilUsuario = {
       uid,
@@ -113,6 +117,12 @@ export async function asegurarDocumentoUsuario(
       createdAt: now,
       updatedAt: now,
       ...(datos.fotoURL ? { fotoURL: datos.fotoURL } : {}),
+      saldoInicial: {
+        monto: 0,
+        moneda: 'COP',
+        configurado: false,
+        actualizadoEn: now,
+      },
     };
 
     await setDoc(userRef, nuevoPerfil);
@@ -123,7 +133,7 @@ export async function asegurarDocumentoUsuario(
 }
 
 /**
- * Actualiza campos específicos del perfil en Firestore
+ * Actualiza campos especificos del perfil en Firestore
  */
 export async function actualizarPerfilUsuario(
   uid: string,
@@ -135,6 +145,33 @@ export async function actualizarPerfilUsuario(
     const userRef = doc(db, 'users', uid);
     await updateDoc(userRef, {
       ...cambios,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+/**
+ * Actualiza el saldo inicial del usuario en Firestore.
+ * Se usa la primera vez (modal de bienvenida) y cuando se edita desde Ajustes.
+ */
+export async function actualizarSaldoInicial(
+  uid: string,
+  monto: number,
+  moneda: string = 'COP'
+): Promise<void> {
+  assertFirebaseConfigured();
+  const path = `users/${uid}`;
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      saldoInicial: {
+        monto,
+        moneda,
+        configurado: true,
+        actualizadoEn: new Date().toISOString(),
+      },
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {

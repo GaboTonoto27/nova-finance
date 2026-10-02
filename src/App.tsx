@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   NavigationRoute,
   Transaction,
@@ -10,15 +10,12 @@ import {
   CategoriaFinanciera,
   Moneda,
 } from './types/finance';
-import {
-  INITIAL_SUMMARY,
-  INITIAL_BUDGETS,
-  INITIAL_GOALS,
-} from './data/mockData';
+import { INITIAL_BUDGETS, INITIAL_GOALS } from './data/mockData';
 import { Sidebar } from './components/common/Sidebar';
 import { MobileNav } from './components/common/MobileNav';
 import { Header } from './components/common/Header';
 import { TransactionModal } from './components/common/TransactionModal';
+import { WelcomeModal } from './components/common/WelcomeModal';
 import { NovaLogo } from './components/common/NovaLogo';
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
@@ -33,14 +30,11 @@ import { RecuperarPasswordView } from './views/RecuperarPasswordView';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { crearTransaccion } from './firebase/transactions';
+import { actualizarSaldoInicial } from './firebase/users';
 import { useTransacciones } from './hooks/useTransacciones';
 
 type AuthMode = 'login' | 'register' | 'forgot';
 
-// ---------------------------------------------------------------------------
-// Mapeo del modelo viejo (Transaction, en ingles) al modelo nuevo
-// (Transaccion, en espanol) que se persiste en Firestore.
-// ---------------------------------------------------------------------------
 function mapearATransaccion(
   tx: Omit<Transaction, 'id'>
 ): Omit<Transaccion, 'id' | 'userId' | 'createdAt' | 'updatedAt'> {
@@ -61,8 +55,6 @@ function mapearATransaccion(
   };
 
   const tipo: TipoMovimiento = tx.type === 'income' ? 'ingreso' : 'gasto';
-
-  // Convierte "YYYY-MM-DD" a ISO 8601 completo
   const fechaISO = new Date(`${tx.date}T12:00:00.000Z`).toISOString();
 
   return {
@@ -79,9 +71,8 @@ function mapearATransaccion(
 }
 
 function AppContent() {
-  const { usuario, cargando } = useAuth();
+  const { usuario, perfil, cargando } = useAuth();
 
-  // Auth screen state
   const [authMode, setAuthMode] = useState<AuthMode>(() => {
     const hash = window.location.hash.toLowerCase();
     if (hash.includes('recuperar') || hash.includes('forgot')) return 'forgot';
@@ -89,7 +80,6 @@ function AppContent() {
     return 'login';
   });
 
-  // Navigation State with URL Hash synchronization for authenticated view
   const [currentRoute, setCurrentRoute] = useState<NavigationRoute>(() => {
     const hash = window.location.hash.replace('#/', '').replace('#', '') as NavigationRoute;
     const validRoutes: NavigationRoute[] = [
@@ -104,28 +94,75 @@ function AppContent() {
     return validRoutes.includes(hash) ? hash : 'dashboard';
   });
 
-  // Transacciones desde Firestore (tiempo real, mapeadas al modelo legacy)
   const {
     transacciones: transactions,
     cargando: cargandoTransacciones,
     error: errorTransacciones,
   } = useTransacciones(usuario?.uid ?? null);
 
-  // Estado para el Summary (por ahora basado en mock, se migrara despues)
-  const [summary, setSummary] = useState<FinancialSummary>(INITIAL_SUMMARY);
-
-  // Presupuestos (por ahora mock, se migraran en Fase 04)
   const [budgets] = useState<BudgetCategory[]>(INITIAL_BUDGETS);
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
   const [addModalInitialType, setAddModalInitialType] = useState<TransactionType>('expense');
+
+  // Summary calculado a partir de transacciones reales + saldo inicial del usuario
+  const summary: FinancialSummary = useMemo(() => {
+    const saldoInicialMonto =
+      perfil?.saldoInicial?.configurado ? perfil.saldoInicial.monto : 0;
+
+    const ahora = new Date();
+    const mesActual = ahora.getMonth();
+    const anioActual = ahora.getFullYear();
+
+    let monthlyIncome = 0;
+    let monthlyExpenses = 0;
+    let balanceTotal = saldoInicialMonto;
+
+    for (const tx of transactions) {
+      const fecha = new Date(tx.date);
+      const esMesActual =
+        fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual;
+
+      if (tx.type === 'income') {
+        balanceTotal += tx.amount;
+        if (esMesActual) monthlyIncome += tx.amount;
+      } else {
+        balanceTotal -= tx.amount;
+        if (esMesActual) monthlyExpenses += tx.amount;
+      }
+    }
+
+    const savingsRate =
+      monthlyIncome > 0
+        ? Math.max(0, ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100)
+        : 0;
+
+    return {
+      currentBalance: balanceTotal,
+      monthlyIncome,
+      monthlyExpenses,
+      savingsRate,
+      incomeChangePercentage: 0,
+      expensesChangePercentage: 0,
+      balanceChangePercentage: 0,
+    };
+  }, [transactions, perfil]);
+
+  // Abre el modal de bienvenida si el usuario esta logueado
+  // pero todavia no configuro su saldo inicial
+  useEffect(() => {
+    if (usuario && perfil && perfil.saldoInicial && !perfil.saldoInicial.configurado) {
+      setIsWelcomeModalOpen(true);
+    } else {
+      setIsWelcomeModalOpen(false);
+    }
+  }, [usuario, perfil]);
 
   const handleOpenAddModal = (type: TransactionType = 'expense') => {
     setAddModalInitialType(type);
     setIsAddModalOpen(true);
   };
 
-  // Sync route with URL hash for navigation & bookmarking
   const navigateTo = (route: NavigationRoute) => {
     setCurrentRoute(route);
     window.location.hash = `/${route}`;
@@ -144,7 +181,9 @@ function AppContent() {
           setAuthMode('login');
         }
       } else {
-        const cleanHash = window.location.hash.replace('#/', '').replace('#', '') as NavigationRoute;
+        const cleanHash = window.location.hash
+          .replace('#/', '')
+          .replace('#', '') as NavigationRoute;
         const validRoutes: NavigationRoute[] = [
           'dashboard',
           'transactions',
@@ -164,17 +203,10 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [usuario]);
 
-  // -------------------------------------------------------------------------
-  // Handle adding a new transaction:
-  // 1) Persiste en Firestore (coleccion /users/{uid}/transactions)
-  // 2) El hook useTransacciones actualiza el estado automaticamente via onSnapshot
-  // 3) Si falla, muestra el error
-  // -------------------------------------------------------------------------
   const handleAddTransaction = async (newTxData: Omit<Transaction, 'id'>) => {
     try {
       const transaccionPayload = mapearATransaccion(newTxData);
       await crearTransaccion(transaccionPayload);
-      // El hook se encarga de actualizar la lista de transacciones
     } catch (error) {
       console.error('Error al guardar la transaccion en Firestore:', error);
       const mensaje =
@@ -185,12 +217,21 @@ function AppContent() {
     }
   };
 
-  const handleResetData = () => {
-    // TODO Fase 03.4: implementar reset real (vaciar Firestore)
-    setSummary(INITIAL_SUMMARY);
+  const handleConfirmSaldoInicial = async (monto: number) => {
+    if (!usuario) return;
+    try {
+      await actualizarSaldoInicial(usuario.uid, monto, 'COP');
+      setIsWelcomeModalOpen(false);
+    } catch (error) {
+      console.error('Error al guardar saldo inicial:', error);
+      throw error;
+    }
   };
 
-  // 1. Loading screen while auth state resolves
+  const handleResetData = () => {
+    alert('Funcionalidad en desarrollo. Se implementara en la Fase 03.4.');
+  };
+
   if (cargando) {
     return (
       <div className="min-h-screen bg-[var(--color-bg)] flex flex-col items-center justify-center p-6 text-[var(--color-text)] transition-colors">
@@ -209,7 +250,6 @@ function AppContent() {
     );
   }
 
-  // 2. Unauthenticated views (Login, Register, Password Recovery)
   if (!usuario) {
     if (authMode === 'register') {
       return (
@@ -247,25 +287,20 @@ function AppContent() {
     );
   }
 
-  // 3. Authenticated App Layout
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] flex flex-col md:flex-row antialiased selection:bg-teal-500/20 selection:text-teal-400 transition-colors">
-      {/* Desktop Sidebar Navigation */}
       <Sidebar
         currentRoute={currentRoute}
         onNavigate={navigateTo}
         onOpenAddModal={() => handleOpenAddModal('expense')}
       />
 
-      {/* Main Content Viewport */}
       <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-10">
-        {/* Top Header */}
         <Header
           currentRoute={currentRoute}
           onOpenAddModal={() => handleOpenAddModal('expense')}
         />
 
-        {/* Route Container with subtle entry animation */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-6xl w-full mx-auto view-enter">
           {currentRoute === 'dashboard' && (
             <DashboardView
@@ -298,25 +333,27 @@ function AppContent() {
 
           {currentRoute === 'insights' && <InsightsView />}
 
-          {currentRoute === 'settings' && (
-            <SettingsView onResetData={handleResetData} />
-          )}
+          {currentRoute === 'settings' && <SettingsView onResetData={handleResetData} />}
         </main>
       </div>
 
-      {/* Touch-Friendly Mobile Bottom Navigation */}
       <MobileNav
         currentRoute={currentRoute}
         onNavigate={navigateTo}
         onOpenAddModal={() => handleOpenAddModal('expense')}
       />
 
-      {/* Quick Add Transaction Modal */}
       <TransactionModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAddTransaction={handleAddTransaction}
         initialType={addModalInitialType}
+      />
+
+      <WelcomeModal
+        isOpen={isWelcomeModalOpen}
+        nombreUsuario={perfil?.nombre || 'Usuario'}
+        onConfirm={handleConfirmSaldoInicial}
       />
     </div>
   );

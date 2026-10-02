@@ -71,7 +71,7 @@ export interface FinancialSummary {
 }
 
 // ============================================================================
-// NOVA v0.3 — Tipos para Firestore (Espanol)
+// NOVA v0.3 - Tipos para Firestore (Espanol)
 // ============================================================================
 // Estos tipos representan el modelo de datos que se persiste en Firestore.
 // Conviven temporalmente con los tipos mock (Transaction, BudgetCategory, etc.)
@@ -88,13 +88,11 @@ export type TipoMovimiento = 'ingreso' | 'gasto' | 'transferencia' | 'inversion'
 
 /**
  * Monedas soportadas por NOVA. COP es la moneda por defecto.
- * Se prepara el sistema para futuras conversiones multi-moneda.
  */
 export type Moneda = 'COP' | 'USD' | 'EUR' | 'GBP';
 
 /**
  * Medio de pago utilizado en un movimiento.
- * Permite analisis detallados por tipo de pago en fases posteriores.
  */
 export type MedioPago =
   | 'efectivo'
@@ -108,7 +106,6 @@ export type MedioPago =
 
 /**
  * Categorias financieras predefinidas para clasificar movimientos.
- * Reemplazan a las categorias en ingles del modelo mock (Housing, Groceries, etc.).
  */
 export type CategoriaFinanciera =
   | 'vivienda'
@@ -127,27 +124,24 @@ export type CategoriaFinanciera =
 /**
  * Transaccion financiera persistida en Firestore.
  * Ruta: /users/{userId}/transactions/{transactionId}
- *
- * El campo `fecha` se guarda como string ISO 8601 (ej. "2026-10-01T14:30:00.000Z")
- * para mantener consistencia con PerfilUsuario.
  */
 export interface Transaccion {
   id?: string;
   userId: string;
   tipo: TipoMovimiento;
-  monto: number; // siempre positivo
+  monto: number;
   moneda: Moneda;
   categoria: CategoriaFinanciera;
   descripcion: string;
-  fecha: string; // ISO 8601
+  fecha: string;
   medioPago?: MedioPago;
   tarjetaId?: string;
   tarjetaNombre?: string;
-  tipoInversion?: string; // "Renta fija", "Acciones", "Cripto", etc.
-  contraparte?: string; // para transferencias
+  tipoInversion?: string;
+  contraparte?: string;
   nota?: string;
-  createdAt: string; // ISO 8601
-  updatedAt: string; // ISO 8601
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**
@@ -157,15 +151,27 @@ export interface Transaccion {
 export interface Tarjeta {
   id?: string;
   userId: string;
-  nombre: string; // ej. "Visa Debito Bancolombia"
+  nombre: string;
   tipo: 'debito' | 'credito';
-  ultimos4: string; // 4 digitos (nunca el numero completo)
-  banco: string; // ej. "Bancolombia", "Nu", "Davivienda"
-  cupoTotal?: number; // solo para credito
-  cupoDisponible?: number; // solo para credito
+  ultimos4: string;
+  banco: string;
+  cupoTotal?: number;
+  cupoDisponible?: number;
   activa: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Saldo inicial configurado por el usuario.
+ * Se guarda dentro del documento /users/{uid} y se usa como base
+ * para calcular el saldo actual.
+ */
+export interface SaldoInicialConfig {
+  monto: number;
+  moneda: string;
+  configurado: boolean;
+  actualizadoEn: string;
 }
 
 // ============================================================================
