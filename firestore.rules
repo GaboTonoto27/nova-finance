@@ -1,0 +1,80 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ========================================================================
+    // NOVA - Reglas de seguridad de Firestore
+    // ========================================================================
+    // Cada usuario solo puede leer y escribir sus propios datos.
+    // Ruta base: /users/{userId}
+    // Subcolecciones: transactions, cards
+
+    // ------------------------------------------------------------------------
+    // Perfil del usuario
+    // ------------------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.uid == userId;
+      allow update: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.uid == userId;
+      allow delete: if false;
+
+      // ----------------------------------------------------------------------
+      // Transacciones del usuario
+      // ----------------------------------------------------------------------
+      match /transactions/{transactionId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.userId == userId
+                      && request.resource.data.monto is number
+                      && request.resource.data.monto > 0
+                      && request.resource.data.tipo in ['ingreso', 'gasto', 'transferencia', 'inversion']
+                      && request.resource.data.moneda in ['COP', 'USD', 'EUR', 'GBP']
+                      && request.resource.data.categoria is string
+                      && request.resource.data.descripcion is string
+                      && request.resource.data.fecha is string;
+
+        allow update: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.userId == userId;
+
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // ----------------------------------------------------------------------
+      // Tarjetas del usuario
+      // ----------------------------------------------------------------------
+      match /cards/{cardId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.userId == userId
+                      && request.resource.data.tipo in ['debito', 'credito']
+                      && request.resource.data.ultimos4 is string
+                      && request.resource.data.ultimos4.size() == 4
+                      && request.resource.data.banco is string
+                      && request.resource.data.nombre is string;
+
+        allow update: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.userId == userId;
+
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // Bloqueo de todo lo demas
+    // ------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
