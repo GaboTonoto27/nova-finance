@@ -15,7 +15,7 @@ import { db, auth, assertFirebaseConfigured } from './config';
 import { Transaccion, TipoMovimiento, Moneda, CategoriaFinanciera } from '../types/finance';
 
 // ============================================================================
-// NOVA v0.3 — Servicio de transacciones en Firestore
+// NOVA v0.3 - Servicio de transacciones en Firestore
 // ============================================================================
 // Todas las funciones trabajan sobre la coleccion:
 //   /users/{userId}/transactions/{transactionId}
@@ -60,6 +60,20 @@ function transaccionesRef(uid: string) {
   return collection(db, 'users', uid, 'transactions');
 }
 
+/**
+ * Elimina las propiedades con valor `undefined` de un objeto.
+ * Firestore rechaza documentos que contienen campos undefined.
+ */
+function limpiarUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const limpio: Partial<T> = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined) {
+      limpio[key] = obj[key];
+    }
+  }
+  return limpio;
+}
+
 function validarTransaccion(
   datos: Omit<Transaccion, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
 ): void {
@@ -98,12 +112,12 @@ export async function crearTransaccion(
   validarTransaccion(datos);
 
   const ahora = new Date().toISOString();
-  const payload = {
+  const payload = limpiarUndefined({
     ...datos,
     userId: uid,
     createdAt: ahora,
     updatedAt: ahora,
-  };
+  });
 
   try {
     const ref = await addDoc(transaccionesRef(uid), payload);
@@ -161,10 +175,13 @@ export async function actualizarTransaccion(
   const uid = obtenerUidActual();
   try {
     const ref = doc(db, 'users', uid, 'transactions', id);
-    await updateDoc(ref, {
-      ...datos,
-      updatedAt: new Date().toISOString(),
-    });
+    await updateDoc(
+      ref,
+      limpiarUndefined({
+        ...datos,
+        updatedAt: new Date().toISOString(),
+      })
+    );
   } catch (error) {
     console.error('Error al actualizar transaccion:', error);
     throw new Error('No se pudo actualizar la transaccion.');

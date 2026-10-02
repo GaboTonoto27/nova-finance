@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { NavigationRoute, Transaction, FinancialSummary, BudgetCategory, TransactionType } from './types/finance';
+import {
+  NavigationRoute,
+  Transaction,
+  FinancialSummary,
+  BudgetCategory,
+  TransactionType,
+  Transaccion,
+  TipoMovimiento,
+  CategoriaFinanciera,
+  Moneda,
+} from './types/finance';
 import {
   INITIAL_SUMMARY,
   INITIAL_TRANSACTIONS,
@@ -23,8 +33,50 @@ import { RegisterView } from './views/RegisterView';
 import { RecuperarPasswordView } from './views/RecuperarPasswordView';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { crearTransaccion } from './firebase/transactions';
 
 type AuthMode = 'login' | 'register' | 'forgot';
+
+// ---------------------------------------------------------------------------
+// Mapeo del modelo viejo (Transaction, en ingles) al modelo nuevo
+// (Transaccion, en espanol) que se persiste en Firestore.
+// ---------------------------------------------------------------------------
+function mapearATransaccion(
+  tx: Omit<Transaction, 'id'>
+): Omit<Transaccion, 'id' | 'userId' | 'createdAt' | 'updatedAt'> {
+  const categoriaMap: Record<string, CategoriaFinanciera> = {
+    Housing: 'vivienda',
+    Groceries: 'mercado',
+    Technology: 'tecnologia',
+    'Health & Wellness': 'salud',
+    'Transit & Mobility': 'transporte',
+    'Culture & Equipment': 'ocio',
+    Dining: 'ocio',
+    Education: 'educacion',
+    Utilities: 'vivienda',
+    Income: 'otro',
+    Investments: 'inversiones',
+    Equipment: 'tecnologia',
+    General: 'otro',
+  };
+
+  const tipo: TipoMovimiento = tx.type === 'income' ? 'ingreso' : 'gasto';
+
+  // Convierte "YYYY-MM-DD" a ISO 8601 completo
+  const fechaISO = new Date(`${tx.date}T12:00:00.000Z`).toISOString();
+
+  return {
+    tipo,
+    monto: tx.amount,
+    moneda: 'COP' as Moneda,
+    categoria: categoriaMap[tx.category] || 'otro',
+    descripcion: tx.description || tx.merchant,
+    fecha: fechaISO,
+    medioPago: 'otro',
+    contraparte: tx.merchant,
+    nota: tx.notes,
+  };
+}
 
 function AppContent() {
   const { usuario, cargando } = useAuth();
@@ -103,49 +155,68 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [usuario]);
 
-  // Handle adding a new transaction dynamically
-  const handleAddTransaction = (newTxData: Omit<Transaction, 'id'>) => {
-    const newTx: Transaction = {
-      ...newTxData,
-      id: `tx-${Date.now().toString(36)}`,
-    };
+  // -------------------------------------------------------------------------
+  // Handle adding a new transaction:
+  // 1) Persiste en Firestore (coleccion /users/{uid}/transactions)
+  // 2) Solo si Firestore guarda OK, actualiza el estado local en memoria.
+  // 3) Si falla, muestra el error y NO modifica el estado.
+  // -------------------------------------------------------------------------
+  const handleAddTransaction = async (newTxData: Omit<Transaction, 'id'>) => {
+    try {
+      // 1) Persistir en Firestore
+      const transaccionPayload = mapearATransaccion(newTxData);
+      await crearTransaccion(transaccionPayload);
 
-    setTransactions((prev) => [newTx, ...prev]);
-
-    setSummary((prev) => {
-      let newBalance = prev.currentBalance;
-      let newIncome = prev.monthlyIncome;
-      let newExpenses = prev.monthlyExpenses;
-
-      if (newTx.type === 'income') {
-        newBalance += newTx.amount;
-        newIncome += newTx.amount;
-      } else {
-        newBalance -= newTx.amount;
-        newExpenses += newTx.amount;
-      }
-
-      const newSavingsRate =
-        newIncome > 0 ? Math.max(0, ((newIncome - newExpenses) / newIncome) * 100) : 0;
-
-      return {
-        ...prev,
-        currentBalance: newBalance,
-        monthlyIncome: newIncome,
-        monthlyExpenses: newExpenses,
-        savingsRate: newSavingsRate,
+      // 2) Actualizar estado local (solo si Firestore guardo OK)
+      const newTx: Transaction = {
+        ...newTxData,
+        id: `tx-${Date.now().toString(36)}`,
       };
-    });
 
-    if (newTx.type === 'expense') {
-      setBudgets((prev) =>
-        prev.map((b) => {
-          if (b.name.toLowerCase().includes(newTx.category.toLowerCase())) {
-            return { ...b, spent: b.spent + newTx.amount };
-          }
-          return b;
-        })
-      );
+      setTransactions((prev) => [newTx, ...prev]);
+
+      setSummary((prev) => {
+        let newBalance = prev.currentBalance;
+        let newIncome = prev.monthlyIncome;
+        let newExpenses = prev.monthlyExpenses;
+
+        if (newTx.type === 'income') {
+          newBalance += newTx.amount;
+          newIncome += newTx.amount;
+        } else {
+          newBalance -= newTx.amount;
+          newExpenses += newTx.amount;
+        }
+
+        const newSavingsRate =
+          newIncome > 0 ? Math.max(0, ((newIncome - newExpenses) / newIncome) * 100) : 0;
+
+        return {
+          ...prev,
+          currentBalance: newBalance,
+          monthlyIncome: newIncome,
+          monthlyExpenses: newExpenses,
+          savingsRate: newSavingsRate,
+        };
+      });
+
+      if (newTx.type === 'expense') {
+        setBudgets((prev) =>
+          prev.map((b) => {
+            if (b.name.toLowerCase().includes(newTx.category.toLowerCase())) {
+              return { ...b, spent: b.spent + newTx.amount };
+            }
+            return b;
+          })
+        );
+      }
+    } catch (error) {
+      console.error('Error al guardar la transaccion en Firestore:', error);
+      const mensaje =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo guardar la transaccion. Intenta de nuevo.';
+      alert(mensaje);
     }
   };
 

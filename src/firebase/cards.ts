@@ -15,7 +15,7 @@ import { db, auth, assertFirebaseConfigured } from './config';
 import { Tarjeta } from '../types/finance';
 
 // ============================================================================
-// NOVA v0.3 — Servicio de tarjetas en Firestore
+// NOVA v0.3 - Servicio de tarjetas en Firestore
 // ============================================================================
 // Todas las funciones trabajan sobre la coleccion:
 //   /users/{userId}/cards/{cardId}
@@ -41,6 +41,20 @@ function obtenerUidActual(): string {
 
 function tarjetasRef(uid: string) {
   return collection(db, 'users', uid, 'cards');
+}
+
+/**
+ * Elimina las propiedades con valor `undefined` de un objeto.
+ * Firestore rechaza documentos que contienen campos undefined.
+ */
+function limpiarUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const limpio: Partial<T> = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined) {
+      limpio[key] = obj[key];
+    }
+  }
+  return limpio;
 }
 
 function validarTarjeta(
@@ -80,13 +94,13 @@ export async function crearTarjeta(
   validarTarjeta(datos);
 
   const ahora = new Date().toISOString();
-  const payload = {
+  const payload = limpiarUndefined({
     ...datos,
     userId: uid,
     activa: datos.activa ?? true,
     createdAt: ahora,
     updatedAt: ahora,
-  };
+  });
 
   try {
     const ref = await addDoc(tarjetasRef(uid), payload);
@@ -144,10 +158,13 @@ export async function actualizarTarjeta(
   const uid = obtenerUidActual();
   try {
     const ref = doc(db, 'users', uid, 'cards', id);
-    await updateDoc(ref, {
-      ...datos,
-      updatedAt: new Date().toISOString(),
-    });
+    await updateDoc(
+      ref,
+      limpiarUndefined({
+        ...datos,
+        updatedAt: new Date().toISOString(),
+      })
+    );
   } catch (error) {
     console.error('Error al actualizar tarjeta:', error);
     throw new Error('No se pudo actualizar la tarjeta.');
