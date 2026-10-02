@@ -12,7 +12,6 @@ import {
 } from './types/finance';
 import {
   INITIAL_SUMMARY,
-  INITIAL_TRANSACTIONS,
   INITIAL_BUDGETS,
   INITIAL_GOALS,
 } from './data/mockData';
@@ -34,6 +33,7 @@ import { RecuperarPasswordView } from './views/RecuperarPasswordView';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { crearTransaccion } from './firebase/transactions';
+import { useTransacciones } from './hooks/useTransacciones';
 
 type AuthMode = 'login' | 'register' | 'forgot';
 
@@ -104,10 +104,19 @@ function AppContent() {
     return validRoutes.includes(hash) ? hash : 'dashboard';
   });
 
-  // Financial Ledger In-Memory State
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [budgets, setBudgets] = useState<BudgetCategory[]>(INITIAL_BUDGETS);
+  // Transacciones desde Firestore (tiempo real, mapeadas al modelo legacy)
+  const {
+    transacciones: transactions,
+    cargando: cargandoTransacciones,
+    error: errorTransacciones,
+  } = useTransacciones(usuario?.uid ?? null);
+
+  // Estado para el Summary (por ahora basado en mock, se migrara despues)
   const [summary, setSummary] = useState<FinancialSummary>(INITIAL_SUMMARY);
+
+  // Presupuestos (por ahora mock, se migraran en Fase 04)
+  const [budgets] = useState<BudgetCategory[]>(INITIAL_BUDGETS);
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addModalInitialType, setAddModalInitialType] = useState<TransactionType>('expense');
 
@@ -158,58 +167,14 @@ function AppContent() {
   // -------------------------------------------------------------------------
   // Handle adding a new transaction:
   // 1) Persiste en Firestore (coleccion /users/{uid}/transactions)
-  // 2) Solo si Firestore guarda OK, actualiza el estado local en memoria.
-  // 3) Si falla, muestra el error y NO modifica el estado.
+  // 2) El hook useTransacciones actualiza el estado automaticamente via onSnapshot
+  // 3) Si falla, muestra el error
   // -------------------------------------------------------------------------
   const handleAddTransaction = async (newTxData: Omit<Transaction, 'id'>) => {
     try {
-      // 1) Persistir en Firestore
       const transaccionPayload = mapearATransaccion(newTxData);
       await crearTransaccion(transaccionPayload);
-
-      // 2) Actualizar estado local (solo si Firestore guardo OK)
-      const newTx: Transaction = {
-        ...newTxData,
-        id: `tx-${Date.now().toString(36)}`,
-      };
-
-      setTransactions((prev) => [newTx, ...prev]);
-
-      setSummary((prev) => {
-        let newBalance = prev.currentBalance;
-        let newIncome = prev.monthlyIncome;
-        let newExpenses = prev.monthlyExpenses;
-
-        if (newTx.type === 'income') {
-          newBalance += newTx.amount;
-          newIncome += newTx.amount;
-        } else {
-          newBalance -= newTx.amount;
-          newExpenses += newTx.amount;
-        }
-
-        const newSavingsRate =
-          newIncome > 0 ? Math.max(0, ((newIncome - newExpenses) / newIncome) * 100) : 0;
-
-        return {
-          ...prev,
-          currentBalance: newBalance,
-          monthlyIncome: newIncome,
-          monthlyExpenses: newExpenses,
-          savingsRate: newSavingsRate,
-        };
-      });
-
-      if (newTx.type === 'expense') {
-        setBudgets((prev) =>
-          prev.map((b) => {
-            if (b.name.toLowerCase().includes(newTx.category.toLowerCase())) {
-              return { ...b, spent: b.spent + newTx.amount };
-            }
-            return b;
-          })
-        );
-      }
+      // El hook se encarga de actualizar la lista de transacciones
     } catch (error) {
       console.error('Error al guardar la transaccion en Firestore:', error);
       const mensaje =
@@ -221,8 +186,7 @@ function AppContent() {
   };
 
   const handleResetData = () => {
-    setTransactions(INITIAL_TRANSACTIONS);
-    setBudgets(INITIAL_BUDGETS);
+    // TODO Fase 03.4: implementar reset real (vaciar Firestore)
     setSummary(INITIAL_SUMMARY);
   };
 
