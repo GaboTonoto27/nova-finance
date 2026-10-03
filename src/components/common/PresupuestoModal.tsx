@@ -68,7 +68,6 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
-  // Categorias disponibles: predeterminadas no usadas (o todas si es edicion)
   const categoriasDisponibles = modoEdicion
     ? categoriasGasto
     : categoriasGasto.filter((c) => !categoriasYaUsadas.includes(c.value));
@@ -109,6 +108,7 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
         setIconName('ShoppingBag');
       }
       setError(null);
+      setGuardando(false);
     }
   }, [isOpen, presupuestoEditar, categoriasYaUsadas, categoriasGasto]);
 
@@ -276,12 +276,15 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
                 $
               </span>
               <input
-                type="number"
-                step="any"
-                min="0"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 placeholder="500000"
                 value={limite}
-                onChange={(e) => setLimite(e.target.value)}
+                onChange={(e) => {
+                  const soloDigitos = e.target.value.replace(/[^0-9]/g, '');
+                  setLimite(soloDigitos);
+                }}
                 className={`w-full pl-8 pr-4 py-2.5 bg-[var(--color-surface-subtle)] border rounded-xl text-lg font-bold text-[var(--color-text)] tabular-nums placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 ${
                   error
                     ? 'border-rose-500 focus:ring-rose-500/20'
@@ -289,6 +292,11 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
                 }`}
               />
             </div>
+            {limite && (
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-1 tabular-nums">
+                Se guardara como ${Number(limite).toLocaleString('es-CO')}
+              </p>
+            )}
             <p className="text-xs text-[var(--color-text-muted)] mt-1">
               Podes empezar con $0 y ajustarlo luego.
             </p>

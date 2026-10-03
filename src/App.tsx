@@ -11,6 +11,7 @@ import {
   Presupuesto,
   MetaAhorro,
   Categoria,
+  PeriodoActualizacion,
 } from './types/finance';
 import { Sidebar } from './components/common/Sidebar';
 import { MobileNav } from './components/common/MobileNav';
@@ -39,7 +40,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AlertProvider, useAlert } from './context/AlertContext';
 import { crearTransaccion } from './firebase/transactions';
-import { actualizarSaldoInicial } from './firebase/users';
+import { configurarSaldoInicial } from './firebase/users';
 import {
   crearPresupuesto,
   actualizarPresupuesto,
@@ -663,12 +664,17 @@ function AppContent() {
   };
 
   // ------------------------------------------------------------------------
-  // Saldo inicial
+  // Saldo inicial (con periodo configurable)
   // ------------------------------------------------------------------------
-  const handleConfirmSaldoInicial = async (monto: number) => {
+    const handleConfirmSaldoInicial = async (
+    monto: number,
+    periodo: PeriodoActualizacion = 'mensual'
+  ) => {
     if (!usuario) return;
     try {
-      await actualizarSaldoInicial(usuario.uid, monto, 'COP');
+      await configurarSaldoInicial(usuario.uid, monto, periodo, 'COP');
+      // El onSnapshot del AuthContext detecta el cambio y cierra el WelcomeModal
+      // automaticamente cuando perfil.saldoInicial.configurado pasa a true.
     } catch (error) {
       console.error('Error al guardar saldo inicial:', error);
       throw error;

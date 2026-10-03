@@ -107,7 +107,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
     }
   };
 
-  // Estado de carga
   if (cargando) {
     return (
       <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
@@ -129,7 +128,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
     );
   }
 
-  // Estado vacio
   if (metas.length === 0) {
     return (
       <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
@@ -168,10 +166,8 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
     );
   }
 
-  // Vista con datos
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text)]">
@@ -199,7 +195,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
         </div>
       )}
 
-      {/* Resumen */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-7 shadow-xs interactive-card">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pb-6 border-b border-[var(--color-border)]">
           <div>
@@ -259,7 +254,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
         )}
       </div>
 
-      {/* Grid de metas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {metas.map((meta) => {
           const percent =
@@ -276,7 +270,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
               className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 flex flex-col justify-between space-y-5 hover:border-[var(--color-accent-border)] shadow-xs transition-all interactive-card group"
             >
               <div className="space-y-4">
-                {/* Header */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2.5 min-w-0 flex-1">
                     <div
@@ -295,7 +288,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Acciones */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
                       onClick={() => onEditarMeta(meta)}
@@ -316,7 +308,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Barra de progreso */}
                 <div className="w-full h-3 bg-[var(--color-surface-subtle)] rounded-full overflow-hidden border border-[var(--color-border)] p-0.5">
                   <div
                     className="h-full rounded-full transition-all duration-500"
@@ -327,7 +318,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                   />
                 </div>
 
-                {/* Cifras */}
                 <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                   <div>
                     <span className="text-[var(--color-text-secondary)] block text-xs font-medium">
@@ -347,7 +337,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Gap + fecha */}
                 <div className="text-xs text-[var(--color-text-secondary)] space-y-1.5 pt-2 border-t border-[var(--color-border)]">
                   <div className="flex items-center justify-between">
                     <span>Falta para llegar:</span>
@@ -367,7 +356,6 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                 </div>
               </div>
 
-              {/* Acciones inferiores */}
               <div className="pt-3 border-t border-[var(--color-border)]">
                 {isAbonando ? (
                   <div className="space-y-2">
@@ -376,11 +364,14 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
                         $
                       </span>
                       <input
-                        type="number"
-                        min="1"
-                        step="any"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         value={abonoMonto}
-                        onChange={(e) => setAbonoMonto(e.target.value)}
+                        onChange={(e) => {
+                          const soloDigitos = e.target.value.replace(/[^0-9]/g, '');
+                          setAbonoMonto(soloDigitos);
+                        }}
                         className="w-full px-3 py-1.5 bg-[var(--color-surface-subtle)] border border-[var(--color-accent)] rounded-xl text-xs font-bold text-[var(--color-text)] tabular-nums focus:outline-none"
                         placeholder="50000"
                         autoFocus

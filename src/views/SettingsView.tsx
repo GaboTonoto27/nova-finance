@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Sliders,
   Bell,
@@ -13,13 +13,21 @@ import {
   Plus,
   Pencil,
   Trash2,
+  AlertTriangle,
+  AlertCircle,
+  Clock,
+  Calendar,
+  History,
+  RotateCcw,
+  Ban,
 } from 'lucide-react';
 import { UI_COPY } from '../data/copy';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { actualizarSaldoInicial } from '../firebase/users';
+import { actualizarSaldoInicial, PerfilUsuario } from '../firebase/users';
 import { formatCurrency } from '../data/format';
-import { Categoria } from '../types/finance';
+import { Categoria, PeriodoActualizacion } from '../types/finance';
+import { useSaldoInicial } from '../hooks/useSaldoInicial';
 
 interface SettingsViewProps {
   onResetData: () => void;
@@ -29,6 +37,37 @@ interface SettingsViewProps {
   onEditarCategoria: (categoria: Categoria) => void;
   onEliminarCategoria: (categoria: Categoria) => void;
 }
+
+const NIVEL_STYLES: Record<
+  'ok' | 'info' | 'warn' | 'danger' | 'blocked',
+  { container: string; icon: string; iconClass: string }
+> = {
+  ok: {
+    container: 'bg-emerald-500/5 border-emerald-500/20',
+    icon: CheckCircle2 as unknown as string,
+    iconClass: 'text-emerald-500',
+  },
+  info: {
+    container: 'bg-teal-500/5 border-teal-500/20',
+    icon: AlertCircle as unknown as string,
+    iconClass: 'text-teal-500',
+  },
+  warn: {
+    container: 'bg-amber-500/10 border-amber-500/30',
+    icon: AlertTriangle as unknown as string,
+    iconClass: 'text-amber-500',
+  },
+  danger: {
+    container: 'bg-rose-500/10 border-rose-500/30',
+    icon: AlertTriangle as unknown as string,
+    iconClass: 'text-rose-500',
+  },
+  blocked: {
+    container: 'bg-[var(--color-surface-subtle)] border-[var(--color-border)]',
+    icon: Ban as unknown as string,
+    iconClass: 'text-[var(--color-text-muted)]',
+  },
+};
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   onResetData,
@@ -48,26 +87,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [savedToast, setSavedToast] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
-  // Saldo inicial
   const [saldoInicialInput, setSaldoInicialInput] = useState('');
   const [savingSaldo, setSavingSaldo] = useState(false);
   const [saldoError, setSaldoError] = useState<string | null>(null);
+  const [confirmarCambio, setConfirmarCambio] = useState(false);
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
+
+  // Hook de saldo inicial
+  const saldo = useSaldoInicial(perfil as PerfilUsuario | null);
 
   useEffect(() => {
-    if (perfil?.saldoInicial?.configurado) {
-      setSaldoInicialInput(String(perfil.saldoInicial.monto));
+    if (saldo.configurado) {
+      setSaldoInicialInput(String(saldo.montoActual));
     } else {
       setSaldoInicialInput('0');
     }
-  }, [perfil]);
+  }, [saldo.configurado, saldo.montoActual]);
 
   const handleSave = () => {
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 2500);
   };
 
-  const handleSaveSaldo = async () => {
-    if (!usuario) return;
+  const handleSolicitarGuardarSaldo = () => {
     setSaldoError(null);
 
     const monto = parseFloat(saldoInicialInput);
@@ -76,11 +118,53 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       return;
     }
 
+    if (monto === saldo.montoActual) {
+      setSaldoError('El monto es el mismo que tenes actualmente.');
+      return;
+    }
+
+    if (!saldo.puedeEditar) {
+      setSaldoError('El saldo esta bloqueado. Espera al proximo periodo.');
+      return;
+    }
+
+    // Si requiere confirmacion, mostrar dialogo
+    if (saldo.requiereConfirmacion) {
+      setConfirmarCambio(true);
+      return;
+    }
+
+    // Guardado directo
+    ejecutarGuardado(monto);
+  };
+
+  const ejecutarGuardado = async (monto: number) => {
+    if (!usuario) return;
+
     try {
       setSavingSaldo(true);
-      await actualizarSaldoInicial(usuario.uid, monto, currency);
-      setSuccessToast('Saldo inicial actualizado correctamente.');
-      setTimeout(() => setSuccessToast(null), 3000);
+      setConfirmarCambio(false);
+
+      await actualizarSaldoInicial(
+        usuario.uid,
+        monto,
+        saldo.periodo,
+        currency,
+        saldo.historialSaldos,
+        saldo.intentosUsados,
+        perfil?.saldoInicial?.intentosRenovadosEn || new Date().toISOString()
+      );
+
+      const restantes = Math.max(0, saldo.intentosMaximos - (saldo.intentosUsados + 1));
+      const mensaje =
+        restantes === 0
+          ? 'Saldo actualizado. Agotaste los 3 intentos de este periodo.'
+          : restantes === 1
+          ? 'Saldo actualizado. Te queda 1 intento de correccion.'
+          : `Saldo actualizado. Te quedan ${restantes} intentos de correccion.`;
+
+      setSuccessToast(mensaje);
+      setTimeout(() => setSuccessToast(null), 5000);
     } catch (error) {
       console.error('Error al guardar saldo inicial:', error);
       setSaldoError('No se pudo guardar. Intenta de nuevo.');
@@ -89,11 +173,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const saldoActual = perfil?.saldoInicial?.configurado
-    ? perfil.saldoInicial.monto
-    : 0;
+  const saldoActualFormateado = useMemo(
+    () => formatCurrency(saldo.montoActual),
+    [saldo.montoActual]
+  );
 
-  // Componente de lista de categorias
+  const nivel = NIVEL_STYLES[saldo.nivelAdvertencia];
+
   const renderListaCategorias = (
     categorias: Categoria[],
     tipo: 'gasto' | 'ingreso'
@@ -150,7 +236,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 max-w-4xl mx-auto w-full">
-      {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text)]">
           {UI_COPY.sections.systemPreferences}
@@ -174,7 +259,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       )}
 
-      {/* Saldo Inicial */}
+      {/* ====================================================================
+          SALDO INICIAL
+      ==================================================================== */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-4 shadow-xs transition-colors interactive-card">
         <div className="border-b border-[var(--color-border)] pb-3">
           <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
@@ -186,18 +273,103 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </p>
         </div>
 
-        <div className="space-y-3">
-          <div className="flex items-center gap-3 p-4 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)]">
-            <div className="flex-1">
-              <span className="text-xs font-semibold text-[var(--color-text-secondary)] block mb-1">
-                Saldo inicial actual
-              </span>
-              <span className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
-                {formatCurrency(saldoActual)}
-              </span>
+        {/* Banner de estado segun intentos */}
+        {saldo.mensajeAdvertencia && (
+          <div
+            className={`flex items-start gap-3 p-4 rounded-2xl border ${nivel.container}`}
+          >
+            {saldo.nivelAdvertencia === 'blocked' ? (
+              <Ban className={`w-5 h-5 shrink-0 mt-0.5 stroke-[2.5] ${nivel.iconClass}`} />
+            ) : saldo.nivelAdvertencia === 'danger' ? (
+              <AlertTriangle className={`w-5 h-5 shrink-0 mt-0.5 stroke-[2.5] ${nivel.iconClass}`} />
+            ) : (
+              <AlertTriangle className={`w-5 h-5 shrink-0 mt-0.5 stroke-[2] ${nivel.iconClass}`} />
+            )}
+            <div className="text-xs leading-relaxed">
+              <p
+                className={`font-bold ${
+                  saldo.nivelAdvertencia === 'blocked'
+                    ? 'text-[var(--color-text)]'
+                    : saldo.nivelAdvertencia === 'danger'
+                    ? 'text-rose-700 dark:text-rose-300'
+                    : 'text-amber-700 dark:text-amber-300'
+                }`}
+              >
+                {saldo.nivelAdvertencia === 'blocked'
+                  ? '🔒 Saldo bloqueado'
+                  : saldo.nivelAdvertencia === 'danger'
+                  ? '⚠️ Ultimo intento disponible'
+                  : '⚠️ Cuidado con los intentos'}
+              </p>
+              <p className="mt-1 opacity-90">{saldo.mensajeAdvertencia}</p>
             </div>
           </div>
+        )}
 
+        {/* Contador de intentos */}
+        <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)]">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-[var(--color-text-secondary)] stroke-[2]" />
+            <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
+              Intentos de correccion
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {Array.from({ length: saldo.intentosMaximos }).map((_, i) => (
+              <div
+                key={i}
+                className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                  i < saldo.intentosRestantes
+                    ? 'bg-emerald-500'
+                    : 'bg-[var(--color-border)]'
+                }`}
+                title={
+                  i < saldo.intentosRestantes
+                    ? 'Intento disponible'
+                    : 'Intento usado'
+                }
+              />
+            ))}
+            <span className="text-xs font-bold text-[var(--color-text)] ml-1 tabular-nums">
+              {saldo.intentosRestantes} / {saldo.intentosMaximos}
+            </span>
+          </div>
+        </div>
+
+        {/* Saldo actual */}
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)]">
+          <div className="flex-1">
+            <span className="text-xs font-semibold text-[var(--color-text-secondary)] block mb-1">
+              Saldo actual
+            </span>
+            <span className="text-2xl font-bold text-[var(--color-text)] tabular-nums">
+              {saldoActualFormateado}
+            </span>
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300">
+              {saldo.periodo}
+            </span>
+            {saldo.proximaActualizacion && (
+              <span className="text-[11px] text-[var(--color-text-muted)]">
+                Renueva {saldo.proximaActualizacion.toLocaleDateString('es-CO', {
+                  day: 'numeric',
+                  month: 'short',
+                })}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Frase contextual */}
+        <div className="p-3.5 rounded-2xl bg-teal-500/5 border border-teal-500/20">
+          <p className="text-xs text-[var(--color-text-secondary)] italic">
+            💬 "{saldo.fraseContextual}"
+          </p>
+        </div>
+
+        {/* Input de edicion o bloqueo */}
+        {saldo.puedeEditar ? (
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
               Editar saldo inicial
@@ -208,11 +380,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   $
                 </span>
                 <input
-                  type="number"
-                  step="any"
-                  min="0"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={saldoInicialInput}
-                  onChange={(e) => setSaldoInicialInput(e.target.value)}
+                  onChange={(e) => {
+                    const soloDigitos = e.target.value.replace(/[^0-9]/g, '');
+                    setSaldoInicialInput(soloDigitos);
+                    setSaldoError(null);
+                  }}
                   className={`w-full pl-8 pr-4 py-2.5 bg-[var(--color-surface-subtle)] border rounded-2xl text-sm font-bold text-[var(--color-text)] tabular-nums focus:outline-none focus:ring-2 ${
                     saldoError
                       ? 'border-rose-500 focus:ring-rose-500/20'
@@ -222,7 +398,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 />
               </div>
               <button
-                onClick={handleSaveSaldo}
+                onClick={handleSolicitarGuardarSaldo}
                 disabled={savingSaldo || !saldoInicialInput}
                 className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 active:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 text-xs font-bold rounded-full transition-colors shadow-sm shadow-teal-500/10"
               >
@@ -230,16 +406,120 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
             {saldoError && (
-              <p className="text-xs text-rose-500 mt-1.5 font-medium">{saldoError}</p>
+              <p className="text-xs text-rose-500 mt-1.5 font-medium">
+                {saldoError}
+              </p>
             )}
             <p className="text-xs text-[var(--color-text-muted)] mt-2">
-              Cambiar este valor recalcula tu saldo disponible en el dashboard.
+              Cada actualizacion consume 1 intento de correccion.
             </p>
           </div>
-        </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] flex items-start gap-3">
+            <Lock className="w-5 h-5 text-[var(--color-text-muted)] shrink-0 mt-0.5 stroke-[2]" />
+            <div>
+              <p className="text-xs font-bold text-[var(--color-text)]">
+                Edicion bloqueada
+              </p>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1 leading-relaxed">
+                {saldo.textoBloqueo ||
+                  'Vas a poder editar tu saldo cuando renueve el periodo.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Historial colapsable */}
+        {saldo.historialSaldos.length > 0 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setMostrarHistorial(!mostrarHistorial)}
+              className="w-full flex items-center justify-between gap-2 p-3 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] hover:border-[var(--color-accent-border)] transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-[var(--color-text-secondary)]" />
+                <span className="text-xs font-bold text-[var(--color-text)]">
+                  Historial de saldos ({saldo.historialSaldos.length})
+                </span>
+              </div>
+              <span className="text-[var(--color-text-muted)] text-xs">
+                {mostrarHistorial ? 'Ocultar' : 'Ver'}
+              </span>
+            </button>
+
+            {mostrarHistorial && (
+              <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                {[...saldo.historialSaldos].reverse().map((entrada, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)]"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-teal-500/15 flex items-center justify-center">
+                        <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 stroke-[2]" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-[var(--color-text)] tabular-nums">
+                          ${entrada.monto.toLocaleString('es-CO')}
+                        </p>
+                        <p className="text-[10px] text-[var(--color-text-muted)]">
+                          {new Date(entrada.fecha).toLocaleDateString('es-CO', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border)]">
+                      {entrada.periodo}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Dialogo de confirmacion (24-48h) */}
+        {confirmarCambio && (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3 animate-in fade-in">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 stroke-[2.5]" />
+              <div className="text-xs">
+                <p className="font-bold text-amber-700 dark:text-amber-300">
+                  Confirmar cambio de saldo
+                </p>
+                <p className="mt-1 text-[var(--color-text-secondary)] leading-relaxed">
+                  Pasaron mas de 24 horas desde tu ultimo cambio. Este ajuste
+                  va a consumir 1 intento de correccion.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmarCambio(false)}
+                className="px-4 py-2 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => ejecutarGuardado(parseFloat(saldoInicialInput))}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold rounded-full transition-colors"
+              >
+                Si, cambiar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Mis Categorias */}
+      {/* ====================================================================
+          MIS CATEGORIAS
+      ==================================================================== */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-5 shadow-xs transition-colors interactive-card">
         <div className="border-b border-[var(--color-border)] pb-3">
           <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
@@ -251,7 +531,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </p>
         </div>
 
-        {/* Categorias de gasto */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
@@ -275,7 +554,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           )}
         </div>
 
-        {/* Categorias de ingreso */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -300,7 +578,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Theme / Appearance */}
+      {/* ====================================================================
+          TEMA
+      ==================================================================== */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-4 shadow-xs transition-colors interactive-card">
         <div className="border-b border-[var(--color-border)] pb-3">
           <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
@@ -373,7 +653,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Financial Parameters */}
+      {/* ====================================================================
+          MONEDA Y CORTE
+      ==================================================================== */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-5 shadow-xs transition-colors interactive-card">
         <div className="border-b border-[var(--color-border)] pb-3">
           <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
@@ -420,7 +702,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Notifications */}
+      {/* ====================================================================
+          NOTIFICACIONES
+      ==================================================================== */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-4 shadow-xs transition-colors interactive-card">
         <div className="border-b border-[var(--color-border)] pb-3">
           <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
@@ -460,7 +744,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Privacy */}
+      {/* ====================================================================
+          PRIVACIDAD
+      ==================================================================== */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-3 shadow-xs transition-colors interactive-card">
         <div className="flex items-center gap-2 text-base font-bold text-[var(--color-text)]">
           <Lock className="w-4 h-4 text-[var(--color-accent)] stroke-[2]" />
@@ -471,7 +757,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </p>
       </div>
 
-      {/* Actions */}
+      {/* ====================================================================
+          ACCIONES
+      ==================================================================== */}
       <div className="flex items-center justify-between pt-2">
         <button
           onClick={onResetData}

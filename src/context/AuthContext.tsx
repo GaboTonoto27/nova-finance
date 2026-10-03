@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from 'firebase/auth';
+import { doc, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { db } from '../firebase/config';
 import {
   observarSesion,
   iniciarSesionConEmail,
@@ -13,7 +15,6 @@ import {
 import {
   PerfilUsuario,
   asegurarDocumentoUsuario,
-  obtenerPerfilUsuario,
 } from '../firebase/users';
 import { isFirebaseConfigured } from '../firebase/config';
 
@@ -42,7 +43,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const limpiarError = () => setError(null);
 
-  // Calcula las iniciales del nombre del perfil (ej. "Gabriel Múnera" -> "GM")
+  // Calcula las iniciales del nombre del perfil (ej. "Gabriel Munera" -> "GM")
   const obtenerIniciales = (): string => {
     const nombre = perfil?.nombre || usuario?.displayName || 'Usuario';
     const partes = nombre.trim().split(/\s+/).filter(Boolean);
@@ -57,25 +58,55 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
 
-    const unsuscribe = observarSesion(async (firebaseUser) => {
+    let perfilUnsub: Unsubscribe | null = null;
+
+    const unsuscribeSesion = observarSesion(async (firebaseUser) => {
+      // Limpiar suscripcion previa del perfil (si existe)
+      if (perfilUnsub) {
+        perfilUnsub();
+        perfilUnsub = null;
+      }
+
       if (firebaseUser) {
         setUsuario(firebaseUser);
+
         try {
-          let userProfile = await obtenerPerfilUsuario(firebaseUser.uid);
-          if (!userProfile) {
-            userProfile = await asegurarDocumentoUsuario(firebaseUser.uid, {
-              nombre: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuario',
-              email: firebaseUser.email || '',
-              fotoURL: firebaseUser.photoURL || undefined,
-            });
-          }
-          setPerfil(userProfile);
+          // Asegurar que el documento existe (primera vez)
+          await asegurarDocumentoUsuario(firebaseUser.uid, {
+            nombre:
+              firebaseUser.displayName ||
+              firebaseUser.email?.split('@')[0] ||
+              'Usuario',
+            email: firebaseUser.email || '',
+            fotoURL: firebaseUser.photoURL || undefined,
+          });
+
+          // Suscribirse al perfil en tiempo real
+          const perfilRef = doc(db, 'users', firebaseUser.uid);
+          perfilUnsub = onSnapshot(
+            perfilRef,
+            (snap) => {
+              if (snap.exists()) {
+                setPerfil(snap.data() as PerfilUsuario);
+              } else {
+                setPerfil(null);
+              }
+              setCargando(false);
+            },
+            (err) => {
+              console.error('Error en onSnapshot del perfil:', err);
+              setCargando(false);
+            }
+          );
         } catch (err) {
           console.error('Error al sincronizar perfil en Firestore:', err);
           // Fallback a datos de auth si Firestore tiene latencia o reglas en proceso
           setPerfil({
             uid: firebaseUser.uid,
-            nombre: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuario',
+            nombre:
+              firebaseUser.displayName ||
+              firebaseUser.email?.split('@')[0] ||
+              'Usuario',
             email: firebaseUser.email || '',
             moneda: 'COP',
             idioma: 'es',
@@ -83,22 +114,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             updatedAt: new Date().toISOString(),
             fotoURL: firebaseUser.photoURL || undefined,
           });
+          setCargando(false);
         }
       } else {
         setUsuario(null);
         setPerfil(null);
+        setCargando(false);
       }
-      setCargando(false);
     });
 
-    return () => unsuscribe();
+    return () => {
+      unsuscribeSesion();
+      if (perfilUnsub) perfilUnsub();
+    };
   }, []);
 
   const iniciarSesionEmail = async (email: string, pass: string): Promise<void> => {
     setError(null);
     if (!isFirebaseConfigured) {
       setError(
-        'Faltan las credenciales de Firebase en el archivo .env. Por favor completa los valores de VITE_FIREBASE_* para habilitar la autenticación real.'
+        'Faltan las credenciales de Firebase en el archivo .env. Por favor completa los valores de VITE_FIREBASE_* para habilitar la autenticacion real.'
       );
       return;
     }
@@ -109,23 +144,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const user = cred.user;
       setUsuario(user);
 
-      try {
-        let userProfile = await obtenerPerfilUsuario(user.uid);
-        if (!userProfile) {
-          userProfile = await asegurarDocumentoUsuario(user.uid, {
-            nombre: user.displayName || user.email?.split('@')[0] || 'Usuario',
-            email: user.email || email,
-          });
-        }
-        setPerfil(userProfile);
-      } catch (err) {
-        console.error('Error al leer perfil tras login:', err);
-      }
+      await asegurarDocumentoUsuario(user.uid, {
+        nombre: user.displayName || user.email?.split('@')[0] || 'Usuario',
+        email: user.email || email,
+      });
+      // El onSnapshot del useEffect se encarga de actualizar el perfil
     } catch (err: unknown) {
       const firebaseError = err as { code?: string; message?: string };
       const mensaje = firebaseError.code
         ? traducirErrorFirebase(firebaseError.code)
-        : (firebaseError.message || 'Error al iniciar sesión.');
+        : firebaseError.message || 'Error al iniciar sesion.';
       setError(mensaje);
       throw new Error(mensaje);
     } finally {
@@ -133,7 +161,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const registrarEmail = async (nombre: string, email: string, pass: string): Promise<void> => {
+  const registrarEmail = async (
+    nombre: string,
+    email: string,
+    pass: string
+  ): Promise<void> => {
     setError(null);
     if (!isFirebaseConfigured) {
       setError(
@@ -157,18 +189,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       // Crear documento en Firestore /users/{uid}
-      const nuevoPerfil = await asegurarDocumentoUsuario(user.uid, {
+      await asegurarDocumentoUsuario(user.uid, {
         nombre: nombre.trim() || 'Usuario',
         email: user.email || email,
       });
 
       setUsuario(user);
-      setPerfil(nuevoPerfil);
+      // El onSnapshot del useEffect se encarga de actualizar el perfil
     } catch (err: unknown) {
       const firebaseError = err as { code?: string; message?: string };
       const mensaje = firebaseError.code
         ? traducirErrorFirebase(firebaseError.code)
-        : (firebaseError.message || 'Error al crear la cuenta.');
+        : firebaseError.message || 'Error al crear la cuenta.';
       setError(mensaje);
       throw new Error(mensaje);
     } finally {
@@ -180,7 +212,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setError(null);
     if (!isFirebaseConfigured) {
       setError(
-        'Faltan las credenciales de Firebase en el archivo .env. Por favor completa los valores de VITE_FIREBASE_* para iniciar sesión con Google.'
+        'Faltan las credenciales de Firebase en el archivo .env. Por favor completa los valores de VITE_FIREBASE_* para iniciar sesion con Google.'
       );
       return;
     }
@@ -191,21 +223,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const user = cred.user;
       setUsuario(user);
 
-      const userProfile = await asegurarDocumentoUsuario(user.uid, {
+      await asegurarDocumentoUsuario(user.uid, {
         nombre: user.displayName || 'Usuario',
         email: user.email || '',
         fotoURL: user.photoURL || undefined,
       });
-      setPerfil(userProfile);
+      // El onSnapshot del useEffect se encarga de actualizar el perfil
     } catch (err: unknown) {
       const firebaseError = err as { code?: string; message?: string };
-      // Si el usuario canceló la ventana emergente, no mostramos un error alarmante
       if (firebaseError.code === 'auth/popup-closed-by-user') {
         return;
       }
       const mensaje = firebaseError.code
         ? traducirErrorFirebase(firebaseError.code)
-        : (firebaseError.message || 'Error al iniciar sesión con Google.');
+        : firebaseError.message || 'Error al iniciar sesion con Google.';
       setError(mensaje);
       throw new Error(mensaje);
     } finally {
@@ -223,7 +254,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const firebaseError = err as { code?: string; message?: string };
       const mensaje = firebaseError.code
         ? traducirErrorFirebase(firebaseError.code)
-        : 'Error al cerrar sesión.';
+        : 'Error al cerrar sesion.';
       setError(mensaje);
     }
   };
@@ -243,7 +274,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const firebaseError = err as { code?: string; message?: string };
       const mensaje = firebaseError.code
         ? traducirErrorFirebase(firebaseError.code)
-        : 'Error al enviar el enlace de recuperación.';
+        : 'Error al enviar el enlace de recuperacion.';
       setError(mensaje);
       throw new Error(mensaje);
     }

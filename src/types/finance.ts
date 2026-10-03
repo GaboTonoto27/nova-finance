@@ -88,14 +88,6 @@ export type MedioPago =
   | 'paypal'
   | 'otro';
 
-// ----------------------------------------------------------------------------
-// Categorias financieras
-// ----------------------------------------------------------------------------
-// El usuario puede crear categorias personalizadas ademas de las
-// predeterminadas. Por eso usamos `string`.
-// Las categorias se guardan en Firestore: /users/{uid}/categorias/{id}
-// ----------------------------------------------------------------------------
-
 export type CategoriaGasto = string;
 export type CategoriaIngreso = string;
 export type CategoriaFinanciera = string;
@@ -144,10 +136,6 @@ export interface SaldoInicialConfig {
 // Tipos para Presupuestos y Metas (Firestore)
 // ============================================================================
 
-/**
- * Presupuesto mensual por categoria.
- * Ruta: /users/{userId}/budgets/{budgetId}
- */
 export interface Presupuesto {
   id?: string;
   userId: string;
@@ -160,10 +148,6 @@ export interface Presupuesto {
   updatedAt: string;
 }
 
-/**
- * Meta de ahorro personalizada.
- * Ruta: /users/{userId}/goals/{goalId}
- */
 export interface MetaAhorro {
   id?: string;
   userId: string;
@@ -182,19 +166,9 @@ export interface MetaAhorro {
 }
 
 // ============================================================================
-// Tipos para Categorias financieras (Firestore)
+// Tipos para Categorias (Firestore)
 // ============================================================================
 
-/**
- * Categoria financiera personalizable por el usuario.
- * Ruta: /users/{userId}/categorias/{categoriaId}
- *
- * Sistema de soft delete con ventana de recuperacion:
- * - Al "eliminar" una categoria, se marca `activa: false`.
- * - El documento NO se borra, solo se oculta de la UI.
- * - El usuario tiene 1 semana para "restaurarla".
- * - Despues de 1 semana, el usuario ya no la ve, pero el doc persiste.
- */
 export interface Categoria {
   id?: string;
   userId: string;
@@ -209,6 +183,58 @@ export interface Categoria {
   createdAt: string;
   updatedAt: string;
 }
+
+// ============================================================================
+// Tipos para Saldo Inicial (con periodo configurable)
+// ============================================================================
+
+/**
+ * Periodo de actualizacion del saldo inicial.
+ * - mensual: el usuario puede actualizarlo el 1° de cada mes.
+ * - quincenal: el usuario puede actualizarlo el 1° y 15 de cada mes.
+ * - anual: el usuario puede actualizarlo el 1° de enero.
+ */
+export type PeriodoActualizacion = 'mensual' | 'quincenal' | 'anual';
+
+export interface EntradaHistorialSaldo {
+  monto: number;
+  fecha: string;
+  periodo: PeriodoActualizacion;
+}
+
+/**
+ * Configuracion completa del saldo inicial del usuario.
+ * Se guarda dentro del documento /users/{uid}.saldoInicial
+ */
+export interface SaldoInicialExtendido {
+  monto: number;
+  moneda: string;
+  configurado: boolean;
+  actualizadoEn: string;
+
+  // Extension de v0.4.5.5
+  periodoActualizacion: PeriodoActualizacion;
+  proximaActualizacion: string; // ISO date
+  ultimoCambioEn: string; // ISO date (para la ventana de 48h)
+  historialSaldos: EntradaHistorialSaldo[];
+
+  // Extension de v0.4.5.5b3 - Intentos de correccion
+  intentosUsados: number; // 0-3 en el periodo actual
+  intentosRenovadosEn: string; // ISO date del ultimo reset
+}
+
+/**
+ * Maximo de intentos de correccion del saldo inicial por periodo.
+ */
+export const MAX_INTENTOS_SALDO_INICIAL = 3;
+
+/**
+ * Estado de edicion del saldo inicial.
+ * - 'libre': puede editar sin restricciones (primeras 24h)
+ * - 'confirmacion': puede editar pero requiere confirmacion (24-48h)
+ * - 'bloqueado': bloqueado hasta proximaActualizacion
+ */
+export type EstadoEdicionSaldo = 'libre' | 'confirmacion' | 'bloqueado';
 
 // ============================================================================
 // Fin de tipos para Firestore

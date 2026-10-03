@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Check, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { X, Check, ArrowDownRight, ArrowUpRight, AlertCircle } from 'lucide-react';
 import { Transaction, TransactionType } from '../../types/finance';
 
 interface CategoriaOption {
@@ -16,7 +16,6 @@ interface TransactionModalProps {
   categoriasIngreso: CategoriaOption[];
 }
 
-// Opciones de pago para GASTOS
 const MEDIOS_PAGO_GASTO = [
   { value: 'efectivo', label: 'Efectivo' },
   { value: 'tarjeta_debito', label: 'Tarjeta debito' },
@@ -28,7 +27,6 @@ const MEDIOS_PAGO_GASTO = [
   { value: 'otro', label: 'Otro (especificar)' },
 ];
 
-// Opciones de recepcion para INGRESOS
 const MEDIOS_RECEPCION_INGRESO = [
   { value: 'transferencia', label: 'Transferencia bancaria' },
   { value: 'efectivo', label: 'Efectivo' },
@@ -37,6 +35,14 @@ const MEDIOS_RECEPCION_INGRESO = [
   { value: 'paypal', label: 'PayPal' },
   { value: 'otro', label: 'Otro (especificar)' },
 ];
+
+interface ErroresForm {
+  amount?: string;
+  merchant?: string;
+  category?: string;
+  date?: string;
+  paymentMethod?: string;
+}
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   isOpen,
@@ -54,7 +60,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const [customPaymentMethod, setCustomPaymentMethod] = useState('');
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState(false);
 
   const isExpense = type === 'expense';
 
@@ -68,25 +74,28 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     [isExpense]
   );
 
-  // Al abrir el modal, resetear
   useEffect(() => {
     if (isOpen) {
       setType(initialType);
-      setErrors({});
+      setTouched(false);
       setCategory('');
       setPaymentMethod(initialType === 'expense' ? 'efectivo' : 'transferencia');
       setCustomPaymentMethod('');
+      setAmount('');
+      setMerchant('');
+      setDescription('');
     }
   }, [isOpen, initialType]);
 
-  // Cuando se cargan las categorias disponibles, seleccionar la primera
   useEffect(() => {
-    if (categoriasDisponibles.length > 0 && !categoriasDisponibles.some((c) => c.value === category)) {
+    if (
+      categoriasDisponibles.length > 0 &&
+      !categoriasDisponibles.some((c) => c.value === category)
+    ) {
       setCategory(categoriasDisponibles[0].value);
     }
   }, [categoriasDisponibles, category]);
 
-  // Cuando el usuario cambia el tipo
   useEffect(() => {
     if (isOpen) {
       setCategory('');
@@ -95,36 +104,56 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
   }, [type, isOpen]);
 
-  if (!isOpen) return null;
+  // -------------------------------------------------------------------------
+  // Validacion reactiva: calcula errores en tiempo real
+  // -------------------------------------------------------------------------
+  const errores: ErroresForm = useMemo(() => {
+    const nuevosErrores: ErroresForm = {};
 
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
+    const parsedAmount = parseFloat(amount);
+    if (!amount.trim()) {
+      nuevosErrores.amount = 'Ingresa el monto del movimiento.';
+    } else if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      nuevosErrores.amount = 'El monto debe ser mayor a $0.';
+    }
+
     if (!merchant.trim()) {
-      newErrors.merchant = isExpense
-        ? 'Dinos donde pagaste.'
+      nuevosErrores.merchant = isExpense
+        ? 'Dinos donde o con quien pagaste.'
         : 'Dinos de donde viene el ingreso.';
     }
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      newErrors.amount = 'Ingresa un valor mayor a $0.';
-    }
+
     if (!category) {
-      newErrors.category = 'Selecciona una categoria.';
-    }
-    if (!date) {
-      newErrors.date = 'La fecha es obligatoria.';
-    }
-    if (paymentMethod === 'otro' && !customPaymentMethod.trim()) {
-      newErrors.paymentMethod = 'Especifica los detalles.';
+      nuevosErrores.category = 'Selecciona una categoria.';
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+    if (!date) {
+      nuevosErrores.date = 'Selecciona la fecha del movimiento.';
+    }
+
+    if (paymentMethod === 'otro' && !customPaymentMethod.trim()) {
+      nuevosErrores.paymentMethod = isExpense
+        ? 'Especifica como pagaste.'
+        : 'Especifica como recibiste el dinero.';
+    }
+
+    return nuevosErrores;
+  }, [amount, merchant, category, date, paymentMethod, customPaymentMethod, isExpense]);
+
+  // Solo mostramos errores despues de que el usuario intento guardar (touched)
+  // Pero los campos con error se marcan en rojo siempre que tengan error,
+  // asi el usuario ve en tiempo real cuando corrige.
+  const erroresVisibles = errores;
+  const erroresCount = Object.keys(errores).length;
+  const formValido = erroresCount === 0;
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    setTouched(true);
+
+    if (!formValido) return;
 
     const finalPaymentMethod =
       paymentMethod === 'otro' && customPaymentMethod.trim()
@@ -143,9 +172,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       status: 'completed',
     });
 
-    setMerchant('');
-    setDescription('');
-    setAmount('');
     onClose();
   };
 
@@ -178,7 +204,37 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+        <form onSubmit={handleSubmit} className="space-y-4 pt-4" noValidate>
+          {/* Banner general de errores: se actualiza en tiempo real */}
+          {erroresCount > 0 && (
+            <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 stroke-[2.5]" />
+              <div className="text-xs">
+                <p className="font-bold">
+                  {erroresCount === 1
+                    ? 'Falta completar 1 campo'
+                    : `Faltan completar ${erroresCount} campos`}
+                </p>
+                <p className="mt-0.5 leading-relaxed opacity-90">
+                  Revisa los campos marcados en rojo antes de guardar.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Banner de exito cuando todo esta listo (solo si touched) */}
+          {touched && formValido && (
+            <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 animate-in fade-in">
+              <Check className="w-4 h-4 shrink-0 mt-0.5 stroke-[2.5]" />
+              <div className="text-xs">
+                <p className="font-bold">Todo listo</p>
+                <p className="mt-0.5 leading-relaxed opacity-90">
+                  Podes guardar el movimiento.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Tipo */}
           <div className="flex p-1 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-2xl">
             <button
@@ -217,26 +273,37 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 $
               </span>
               <input
-                type="number"
-                step="any"
-                min="0"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 placeholder="50000"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  const soloDigitos = e.target.value.replace(/[^0-9]/g, '');
+                  setAmount(soloDigitos);
+                }}
                 className={`w-full pl-8 pr-4 py-2.5 bg-[var(--color-surface-subtle)] border rounded-xl text-lg font-bold text-[var(--color-text)] tabular-nums placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 ${
-                  errors.amount
+                  errores.amount
                     ? 'border-rose-500 focus:ring-rose-500/20'
                     : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
                 }`}
                 autoFocus
               />
             </div>
-            {errors.amount && (
-              <p className="text-xs text-rose-500 mt-1 font-medium">{errors.amount}</p>
+            {amount && !errores.amount && (
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-1 tabular-nums">
+                Se guardara como ${Number(amount).toLocaleString('es-CO')}
+              </p>
+            )}
+            {errores.amount && (
+              <p className="text-xs text-rose-500 mt-1 font-medium flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <span>{errores.amount}</span>
+              </p>
             )}
           </div>
 
-          {/* Donde + Categoria */}
+          {/* Merchant + Categoria */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
@@ -250,14 +317,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 value={merchant}
                 onChange={(e) => setMerchant(e.target.value)}
                 className={`w-full px-3 py-2 bg-[var(--color-surface-subtle)] border rounded-xl text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 ${
-                  errors.merchant
+                  errores.merchant
                     ? 'border-rose-500 focus:ring-rose-500/20'
                     : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
                 }`}
               />
-              {errors.merchant && (
-                <p className="text-xs text-rose-500 mt-1 font-medium">
-                  {errors.merchant}
+              {errores.merchant && (
+                <p className="text-xs text-rose-500 mt-1 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  <span>{errores.merchant}</span>
                 </p>
               )}
             </div>
@@ -269,7 +337,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"
+                className={`w-full px-3 py-2 bg-[var(--color-surface-subtle)] border rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 ${
+                  errores.category
+                    ? 'border-rose-500 focus:ring-rose-500/20'
+                    : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
+                }`}
               >
                 {categoriasDisponibles.length === 0 && (
                   <option value="">Sin categorias disponibles</option>
@@ -280,15 +352,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   </option>
                 ))}
               </select>
-              {errors.category && (
-                <p className="text-xs text-rose-500 mt-1 font-medium">
-                  {errors.category}
+              {errores.category && (
+                <p className="text-xs text-rose-500 mt-1 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  <span>{errores.category}</span>
                 </p>
               )}
             </div>
           </div>
 
-          {/* Fecha + Como pago */}
+          {/* Fecha + Pago */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
@@ -298,8 +371,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"
+                className={`w-full px-3 py-2 bg-[var(--color-surface-subtle)] border rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 ${
+                  errores.date
+                    ? 'border-rose-500 focus:ring-rose-500/20'
+                    : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
+                }`}
               />
+              {errores.date && (
+                <p className="text-xs text-rose-500 mt-1 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  <span>{errores.date}</span>
+                </p>
+              )}
             </div>
 
             <div>
@@ -310,7 +393,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
                 className={`w-full px-3 py-2 bg-[var(--color-surface-subtle)] border rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 ${
-                  errors.paymentMethod
+                  errores.paymentMethod
                     ? 'border-rose-500 focus:ring-rose-500/20'
                     : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
                 }`}
@@ -324,7 +407,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Custom payment */}
+          {/* Custom payment method */}
           {paymentMethod === 'otro' && (
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
@@ -336,14 +419,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 value={customPaymentMethod}
                 onChange={(e) => setCustomPaymentMethod(e.target.value)}
                 className={`w-full px-3 py-2 bg-[var(--color-surface-subtle)] border rounded-xl text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 ${
-                  errors.paymentMethod
+                  errores.paymentMethod
                     ? 'border-rose-500 focus:ring-rose-500/20'
                     : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
                 }`}
               />
-              {errors.paymentMethod && (
-                <p className="text-xs text-rose-500 mt-1 font-medium">
-                  {errors.paymentMethod}
+              {errores.paymentMethod && (
+                <p className="text-xs text-rose-500 mt-1 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  <span>{errores.paymentMethod}</span>
                 </p>
               )}
             </div>
