@@ -88,32 +88,17 @@ export type MedioPago =
   | 'paypal'
   | 'otro';
 
-// Categorias para GASTOS
-export type CategoriaGasto =
-  | 'vivienda'
-  | 'mercado'
-  | 'transporte'
-  | 'tecnologia'
-  | 'salud'
-  | 'educacion'
-  | 'ocio'
-  | 'suscripciones'
-  | 'deudas'
-  | 'otro';
+// ----------------------------------------------------------------------------
+// Categorias financieras
+// ----------------------------------------------------------------------------
+// El usuario puede crear categorias personalizadas ademas de las
+// predeterminadas. Por eso usamos `string`.
+// Las categorias predeterminadas se listan en src/data/categorias.ts
+// ----------------------------------------------------------------------------
 
-// Categorias para INGRESOS
-export type CategoriaIngreso =
-  | 'sueldo'
-  | 'freelance'
-  | 'ventas'
-  | 'regalos'
-  | 'inversiones'
-  | 'reembolsos'
-  | 'prestamos'
-  | 'otros';
-
-// Union de todas las categorias
-export type CategoriaFinanciera = CategoriaGasto | CategoriaIngreso | 'ahorro';
+export type CategoriaGasto = string;
+export type CategoriaIngreso = string;
+export type CategoriaFinanciera = string;
 
 export interface Transaccion {
   id?: string;

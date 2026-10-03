@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, Plus, Sparkles } from 'lucide-react';
 import { Presupuesto, CategoriaGasto } from '../../types/finance';
 import { CATEGORIAS_GASTO } from '../../data/categorias';
 
@@ -7,13 +7,14 @@ interface PresupuestoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: {
-    categoria: CategoriaGasto;
+    categoria: CategoriaGasto | string;
+    categoriaCustom?: string;
     limite: number;
     color: string;
     iconName: string;
   }) => Promise<void>;
   presupuestoEditar?: Presupuesto | null;
-  categoriasYaUsadas: CategoriaGasto[];
+  categoriasYaUsadas: string[];
 }
 
 const COLORES_DISPONIBLES = [
@@ -48,28 +49,48 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
   presupuestoEditar,
   categoriasYaUsadas,
 }) => {
-  const [categoria, setCategoria] = useState<CategoriaGasto>('mercado');
+  const modoEdicion = Boolean(presupuestoEditar);
+
+  const [categoria, setCategoria] = useState<string>('mercado');
+  const [modoCustom, setModoCustom] = useState(false);
+  const [categoriaCustom, setCategoriaCustom] = useState('');
   const [limite, setLimite] = useState('');
   const [color, setColor] = useState('#0D9488');
   const [iconName, setIconName] = useState('ShoppingBag');
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
-  const modoEdicion = Boolean(presupuestoEditar);
-
   useEffect(() => {
     if (isOpen) {
       if (presupuestoEditar) {
-        setCategoria(presupuestoEditar.categoria);
+        const esPredeterminada = CATEGORIAS_GASTO.some(
+          (c) => c.value === presupuestoEditar.categoria
+        );
+        if (esPredeterminada) {
+          setCategoria(presupuestoEditar.categoria);
+          setModoCustom(false);
+          setCategoriaCustom('');
+        } else {
+          setModoCustom(true);
+          setCategoriaCustom(presupuestoEditar.categoria);
+          setCategoria('otro');
+        }
         setLimite(String(presupuestoEditar.limite));
         setColor(presupuestoEditar.color);
         setIconName(presupuestoEditar.iconName);
       } else {
-        // Buscar primera categoria no usada
-        const disponible = CATEGORIAS_GASTO.find(
-          (c) => !categoriasYaUsadas.includes(c.value as CategoriaGasto)
+        const disponibles = CATEGORIAS_GASTO.filter(
+          (c) => !categoriasYaUsadas.includes(c.value)
         );
-        setCategoria((disponible?.value as CategoriaGasto) || 'mercado');
+        if (disponibles.length > 0) {
+          setCategoria(disponibles[0].value);
+          setModoCustom(false);
+          setCategoriaCustom('');
+        } else {
+          setModoCustom(true);
+          setCategoriaCustom('');
+          setCategoria('otro');
+        }
         setLimite('');
         setColor('#0D9488');
         setIconName('ShoppingBag');
@@ -84,6 +105,20 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
     e.preventDefault();
     setError(null);
 
+    let categoriaFinal: string = categoria;
+    if (modoCustom) {
+      const custom = categoriaCustom.trim().toLowerCase().replace(/\s+/g, '_');
+      if (!custom) {
+        setError('Escribi el nombre de la categoria.');
+        return;
+      }
+      if (custom.length < 2) {
+        setError('La categoria debe tener al menos 2 caracteres.');
+        return;
+      }
+      categoriaFinal = custom;
+    }
+
     const limiteNum = parseFloat(limite);
     if (isNaN(limiteNum) || limiteNum < 0) {
       setError('Ingresa un limite valido (mayor o igual a cero).');
@@ -93,7 +128,8 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
     try {
       setGuardando(true);
       await onSave({
-        categoria,
+        categoria: categoriaFinal as CategoriaGasto,
+        categoriaCustom: modoCustom ? categoriaCustom.trim() : undefined,
         limite: limiteNum,
         color,
         iconName,
@@ -106,12 +142,11 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
     }
   };
 
-  // Categorias disponibles para este modal
   const categoriasDisponibles = modoEdicion
     ? CATEGORIAS_GASTO
-    : CATEGORIAS_GASTO.filter(
-        (c) => !categoriasYaUsadas.includes(c.value as CategoriaGasto)
-      );
+    : CATEGORIAS_GASTO.filter((c) => !categoriasYaUsadas.includes(c.value));
+
+  const noHayCategorias = categoriasDisponibles.length === 0 && !modoCustom;
 
   return (
     <div
@@ -119,14 +154,16 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
       role="dialog"
       aria-modal="true"
     >
-      <div className="relative w-full max-w-md bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl shadow-2xl p-6 sm:p-7 text-[var(--color-text)] animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-md bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl shadow-2xl p-6 sm:p-7 text-[var(--color-text)] animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border)]">
           <div>
             <h2 className="text-lg font-bold text-[var(--color-text)]">
               {modoEdicion ? 'Editar presupuesto' : 'Nuevo presupuesto'}
             </h2>
             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-              Define un limite de gasto por categoria
+              {modoEdicion
+                ? 'Modifica el limite, color o icono'
+                : 'Define un limite de gasto para una categoria'}
             </p>
           </div>
           <button
@@ -140,26 +177,81 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-          {/* Categoria */}
-          <div>
-            <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
-              Categoria *
-            </label>
-            <select
-              value={categoria}
-              onChange={(e) => setCategoria(e.target.value as CategoriaGasto)}
-              disabled={modoEdicion}
-              className="w-full px-3 py-2.5 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] disabled:opacity-60"
-            >
-              {categoriasDisponibles.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!modoCustom ? (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
+                  Categoria *
+                </label>
+                {noHayCategorias ? (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300">
+                    Ya usaste todas las categorias predeterminadas. Crea una
+                    categoria personalizada.
+                  </div>
+                ) : (
+                  <select
+                    value={categoria}
+                    onChange={(e) => setCategoria(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                  >
+                    {categoriasDisponibles.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
 
-          {/* Limite */}
+              <button
+                type="button"
+                onClick={() => {
+                  setModoCustom(true);
+                  setCategoriaCustom('');
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 border-2 border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] rounded-xl text-xs font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-all"
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Crear categoria personalizada</span>
+              </button>
+            </>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-[var(--color-text)]">
+                  Nombre de la categoria *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModoCustom(false);
+                    setCategoriaCustom('');
+                    if (categoriasDisponibles.length > 0) {
+                      setCategoria(categoriasDisponibles[0].value);
+                    }
+                  }}
+                  className="text-xs text-[var(--color-accent)] hover:underline font-medium"
+                >
+                  Volver a predeterminadas
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="ej. Mascotas, Regalos, Viajes"
+                value={categoriaCustom}
+                onChange={(e) => setCategoriaCustom(e.target.value)}
+                className="w-full px-3 py-2.5 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                autoFocus
+              />
+              <p className="text-xs text-[var(--color-text-muted)] mt-1.5 flex items-start gap-1.5">
+                <Sparkles className="w-3 h-3 shrink-0 mt-0.5 text-teal-500" />
+                <span>
+                  Escribi como quieras. La app va a guardarla como tu categoria personal.
+                </span>
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
               Limite mensual *
@@ -180,15 +272,13 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
                     ? 'border-rose-500 focus:ring-rose-500/20'
                     : 'border-[var(--color-border)] focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]'
                 }`}
-                autoFocus
               />
             </div>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              Puedes empezar con $0 y ajustarlo luego.
+              Podes empezar con $0 y ajustarlo luego.
             </p>
           </div>
 
-          {/* Color */}
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-2">
               Color
@@ -211,7 +301,6 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
             </div>
           </div>
 
-          {/* Icono */}
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
               Icono
@@ -229,11 +318,8 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
             </select>
           </div>
 
-          {error && (
-            <p className="text-xs text-rose-500 font-medium">{error}</p>
-          )}
+          {error && <p className="text-xs text-rose-500 font-medium">{error}</p>}
 
-          {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--color-border)]">
             <button
               type="button"
@@ -249,7 +335,13 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
               className="flex items-center gap-1.5 px-5 py-2.5 bg-teal-500 hover:bg-teal-400 active:bg-teal-600 disabled:opacity-50 text-slate-950 text-xs font-bold rounded-full transition-colors shadow-sm shadow-teal-500/10 interactive-pill"
             >
               <Check className="w-4 h-4 stroke-[2.5]" />
-              <span>{guardando ? 'Guardando...' : modoEdicion ? 'Guardar cambios' : 'Crear presupuesto'}</span>
+              <span>
+                {guardando
+                  ? 'Guardando...'
+                  : modoEdicion
+                  ? 'Guardar cambios'
+                  : 'Crear presupuesto'}
+              </span>
             </button>
           </div>
         </form>

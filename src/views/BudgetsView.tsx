@@ -41,6 +41,29 @@ const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>
   MoreHorizontal: MoreHorizontal,
 };
 
+// ----------------------------------------------------------------------------
+// Helpers de color segun porcentaje de uso
+// ----------------------------------------------------------------------------
+function getBarColor(percent: number, colorOriginal: string): string {
+  if (percent >= 100) return '#EF4444'; // Rojo - excedido
+  if (percent >= 90) return '#F59E0B'; // Naranja - critico
+  if (percent >= 70) return '#FBBF24'; // Amarillo - atencion
+  return colorOriginal; // Color original - bien
+}
+
+function getStatusLabel(
+  percent: number,
+  gastado: number,
+  limite: number
+): { text: string; tone: 'ok' | 'warning' | 'alert' } {
+  if (limite === 0) return { text: 'Defini un limite', tone: 'warning' };
+  if (gastado > limite)
+    return { text: `Te pasaste por ${formatCurrency(gastado - limite)}`, tone: 'alert' };
+  if (percent >= 90) return { text: 'Cerca del limite', tone: 'warning' };
+  if (percent >= 70) return { text: 'Ojo con los gastos', tone: 'warning' };
+  return { text: `Te queda libre: ${formatCurrency(limite - gastado)}`, tone: 'ok' };
+}
+
 export const BudgetsView: React.FC<BudgetsViewProps> = ({
   presupuestos,
   cargando,
@@ -60,9 +83,13 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   const overallPercentage =
     totalAllocated > 0 ? Math.round((totalSpent / totalAllocated) * 100) : 0;
 
-  // ------------------------------------------------------------------------
-  // Estado de carga
-  // ------------------------------------------------------------------------
+  // Contar excedidos para alerta global
+  const excedidos = useMemo(
+    () => presupuestos.filter((p) => p.limite > 0 && p.gastado > p.limite),
+    [presupuestos]
+  );
+
+  // Loading
   if (cargando) {
     return (
       <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
@@ -86,9 +113,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
     );
   }
 
-  // ------------------------------------------------------------------------
   // Estado vacio
-  // ------------------------------------------------------------------------
   if (presupuestos.length === 0) {
     return (
       <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
@@ -111,7 +136,6 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
             </h2>
             <p className="text-sm text-[var(--color-text-secondary)] mt-1 max-w-md mx-auto">
               Crea limites de gasto por categoria para tener el control de tu dinero.
-              Cada mes vas a ver cuanto llevas gastado en cada uno.
             </p>
           </div>
           <button
@@ -127,9 +151,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
     );
   }
 
-  // ------------------------------------------------------------------------
   // Vista con datos
-  // ------------------------------------------------------------------------
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
       {/* Header */}
@@ -152,6 +174,24 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
           <span>Nuevo presupuesto</span>
         </button>
       </div>
+
+      {/* Alerta global de excedidos */}
+      {excedidos.length > 0 && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 animate-in fade-in">
+          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 stroke-[2.5]" />
+          <div className="text-sm">
+            <p className="font-bold">
+              {excedidos.length === 1
+                ? 'Tenes 1 presupuesto excedido'
+                : `Tenes ${excedidos.length} presupuestos excedidos`}
+            </p>
+            <p className="text-xs mt-0.5 leading-relaxed opacity-90">
+              {excedidos.map((p) => CATEGORY_LABELS[p.categoria] || p.categoria).join(', ')}.
+              Cuidá tu bolsillo.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Resumen */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-7 shadow-xs interactive-card">
@@ -236,14 +276,19 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {presupuestos.map((p) => {
           const percent = p.limite > 0 ? Math.round((p.gastado / p.limite) * 100) : 0;
-          const remaining = p.limite - p.gastado;
-          const isOver = remaining < 0;
+          const isOver = p.limite > 0 && p.gastado > p.limite;
           const Icon = CATEGORY_ICONS[p.iconName] || ShoppingBag;
+          const barColor = getBarColor(percent, p.color);
+          const status = getStatusLabel(percent, p.gastado, p.limite);
 
           return (
             <div
               key={p.id}
-              className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 flex flex-col justify-between space-y-4 hover:border-[var(--color-accent-border)] shadow-xs transition-all interactive-card group"
+              className={`bg-[var(--color-surface)] border rounded-3xl p-5 flex flex-col justify-between space-y-4 shadow-xs transition-all interactive-card group ${
+                isOver
+                  ? 'border-rose-500/50 hover:border-rose-500'
+                  : 'border-[var(--color-border)] hover:border-[var(--color-accent-border)]'
+              }`}
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -259,7 +304,6 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                     </h3>
                   </div>
 
-                  {/* Acciones */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => onEditarPresupuesto(p)}
@@ -280,20 +324,16 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Barra de progreso */}
                 <div className="w-full h-2.5 bg-[var(--color-surface-subtle)] rounded-full overflow-hidden my-3">
                   <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      isOver ? 'bg-rose-500' : ''
-                    }`}
+                    className="h-full rounded-full transition-all duration-300"
                     style={{
                       width: `${Math.min(100, percent)}%`,
-                      backgroundColor: isOver ? '#EF4444' : p.color,
+                      backgroundColor: barColor,
                     }}
                   />
                 </div>
 
-                {/* Numeros */}
                 <div className="flex items-baseline justify-between pt-1">
                   <span className="text-xs text-[var(--color-text-secondary)] font-medium">
                     Gastado:
@@ -311,27 +351,23 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                 </div>
               </div>
 
-              {/* Footer de estado */}
               <div className="pt-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs">
-                <span className="text-[var(--color-text-secondary)]">
-                  {p.limite === 0 ? (
-                    <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                      <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />
-                      Definí un limite
-                    </span>
-                  ) : isOver ? (
-                    <span className="text-rose-500 flex items-center gap-1 font-semibold">
-                      <AlertTriangle className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>Te pasaste por {formatCurrency(Math.abs(remaining))}</span>
-                    </span>
-                  ) : (
-                    <span>
-                      Te queda libre:{' '}
-                      <strong className="text-[var(--color-text)] font-semibold">
-                        {formatCurrency(remaining)}
-                      </strong>
-                    </span>
+                <span
+                  className={
+                    status.tone === 'alert'
+                      ? 'text-rose-500 flex items-center gap-1 font-semibold'
+                      : status.tone === 'warning'
+                      ? 'text-amber-600 dark:text-amber-400 flex items-center gap-1 font-semibold'
+                      : 'text-[var(--color-text-secondary)]'
+                  }
+                >
+                  {status.tone === 'alert' && (
+                    <AlertTriangle className="w-3.5 h-3.5 stroke-[2.5]" />
                   )}
+                  {status.tone === 'warning' && (
+                    <AlertTriangle className="w-3.5 h-3.5 stroke-[2]" />
+                  )}
+                  {status.text}
                 </span>
                 {p.limite > 0 && (
                   <span className="text-xs font-bold text-[var(--color-text-muted)] tabular-nums">

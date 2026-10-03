@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   NavigationRoute,
   Transaction,
@@ -19,6 +19,7 @@ import { WelcomeModal } from './components/common/WelcomeModal';
 import { PresupuestoModal } from './components/common/PresupuestoModal';
 import { MetaModal } from './components/common/MetaModal';
 import { NovaLogo } from './components/common/NovaLogo';
+import { AlertToast } from './components/common/AlertToast';
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
 import { BudgetsView } from './views/BudgetsView';
@@ -31,6 +32,7 @@ import { RegisterView } from './views/RegisterView';
 import { RecuperarPasswordView } from './views/RecuperarPasswordView';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { AlertProvider, useAlert } from './context/AlertContext';
 import { crearTransaccion } from './firebase/transactions';
 import { actualizarSaldoInicial } from './firebase/users';
 import {
@@ -39,15 +41,15 @@ import {
   eliminarPresupuesto,
   crearPresupuestosIniciales,
 } from './firebase/presupuestos';
-import {
-  crearMeta,
-  actualizarMeta,
-  eliminarMeta,
-} from './firebase/metas';
+import { crearMeta, actualizarMeta, eliminarMeta } from './firebase/metas';
 import { useTransacciones } from './hooks/useTransacciones';
 import { usePresupuestos } from './hooks/usePresupuestos';
 import { useMetas } from './hooks/useMetas';
 import { CATEGORY_LABELS } from './data/copy';
+import {
+  recalcularPresupuestos,
+  obtenerPresupuestosExcedidos,
+} from './utils/calcularGastado';
 
 type AuthMode = 'login' | 'register' | 'forgot';
 
@@ -92,6 +94,7 @@ function mapearATransaccion(
 
 function AppContent() {
   const { usuario, perfil, cargando } = useAuth();
+  const { showAlert } = useAlert();
 
   const [authMode, setAuthMode] = useState<AuthMode>(() => {
     const hash = window.location.hash.toLowerCase();
@@ -115,24 +118,24 @@ function AppContent() {
   });
 
   // Hooks de Firestore
-  const {
-    transacciones: transactions,
-    cargando: cargandoTransacciones,
-  } = useTransacciones(usuario?.uid ?? null);
+  const { transacciones: transactions } = useTransacciones(usuario?.uid ?? null);
 
-  const {
-    presupuestos,
-    cargando: cargandoPresupuestos,
-  } = usePresupuestos(usuario?.uid ?? null);
+  const { presupuestos, cargando: cargandoPresupuestos } = usePresupuestos(
+    usuario?.uid ?? null
+  );
 
-  const {
-    metas,
-    cargando: cargandoMetas,
-  } = useMetas(usuario?.uid ?? null);
+  const { metas, cargando: cargandoMetas } = useMetas(usuario?.uid ?? null);
+
+  // Presupuestos con el campo 'gastado' calculado desde las transacciones reales
+  const presupuestosConGastado = useMemo(
+    () => recalcularPresupuestos(presupuestos, transactions),
+    [presupuestos, transactions]
+  );
 
   // Estados de modales
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [addModalInitialType, setAddModalInitialType] = useState<TransactionType>('expense');
+  const [addModalInitialType, setAddModalInitialType] =
+    useState<TransactionType>('expense');
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
 
   const [isPresupuestoModalOpen, setIsPresupuestoModalOpen] = useState(false);
@@ -195,8 +198,7 @@ function AppContent() {
     }
   }, [usuario, perfil]);
 
-  // Auto-crear presupuestos iniciales cuando un usuario esta logueado,
-  // tiene saldo inicial configurado y no tiene ningun presupuesto
+  // Auto-crear presupuestos iniciales
   useEffect(() => {
     if (
       usuario &&
@@ -209,6 +211,38 @@ function AppContent() {
       });
     }
   }, [usuario, perfil, cargandoPresupuestos, presupuestos.length]);
+
+  // Detectar presupuestos excedidos y notificar al usuario una vez por sesion
+  const presupuestosExcedidosNotificados = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (cargandoPresupuestos) return;
+
+    const excedidos = obtenerPresupuestosExcedidos(presupuestosConGastado);
+
+    excedidos.forEach(({ presupuesto, exceso }) => {
+      const id = presupuesto.id || '';
+      if (!id || presupuestosExcedidosNotificados.current.has(id)) return;
+
+      presupuestosExcedidosNotificados.current.add(id);
+
+      const nombreCategoria =
+        CATEGORY_LABELS[presupuesto.categoria] || presupuesto.categoria;
+      const excesoFormateado = new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(exceso);
+
+      showAlert({
+        type: 'warning',
+        title: 'Presupuesto excedido',
+        message: `Te pasaste ${excesoFormateado} en "${nombreCategoria}". Cuidá tu bolsillo.`,
+        duration: 7000,
+      });
+    });
+  }, [presupuestosConGastado, cargandoPresupuestos, showAlert]);
 
   const handleOpenAddModal = (type: TransactionType = 'expense') => {
     setAddModalInitialType(type);
@@ -255,26 +289,37 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [usuario]);
 
-  // ------------------------------------------------------------------------
   // Transacciones
-  // ------------------------------------------------------------------------
   const handleAddTransaction = async (newTxData: Omit<Transaction, 'id'>) => {
     try {
       const transaccionPayload = mapearATransaccion(newTxData);
       await crearTransaccion(transaccionPayload);
+
+      const esIngreso = newTxData.type === 'income';
+      const montoFormateado = new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 0,
+      }).format(newTxData.amount);
+
+      showAlert({
+        type: esIngreso ? 'success' : 'info',
+        title: esIngreso ? 'Ingreso registrado' : 'Gasto registrado',
+        message: `${montoFormateado} en "${newTxData.description || newTxData.merchant}".`,
+        icon: esIngreso ? 'ingreso' : 'gasto',
+        duration: 5000,
+      });
     } catch (error) {
       console.error('Error al guardar la transaccion en Firestore:', error);
       const mensaje =
         error instanceof Error
           ? error.message
           : 'No se pudo guardar la transaccion. Intenta de nuevo.';
-      alert(mensaje);
+      showAlert({ type: 'error', title: 'Error al guardar', message: mensaje });
     }
   };
 
-  // ------------------------------------------------------------------------
   // Presupuestos
-  // ------------------------------------------------------------------------
   const handleNuevoPresupuesto = () => {
     setPresupuestoEditar(null);
     setIsPresupuestoModalOpen(true);
@@ -286,26 +331,43 @@ function AppContent() {
   };
 
   const handleGuardarPresupuesto = async (data: {
-    categoria: Presupuesto['categoria'];
+    categoria: Presupuesto['categoria'] | string;
+    categoriaCustom?: string;
     limite: number;
     color: string;
     iconName: string;
   }) => {
-    if (presupuestoEditar && presupuestoEditar.id) {
+    const esEdicion = Boolean(presupuestoEditar && presupuestoEditar.id);
+
+    const nombreCategoria =
+      data.categoriaCustom ||
+      CATEGORY_LABELS[data.categoria as string] ||
+      data.categoria;
+
+    if (esEdicion && presupuestoEditar?.id) {
       await actualizarPresupuesto(presupuestoEditar.id, {
+        categoria: data.categoria as Presupuesto['categoria'],
         limite: data.limite,
         color: data.color,
         iconName: data.iconName,
       });
     } else {
       await crearPresupuesto({
-        categoria: data.categoria,
+        categoria: data.categoria as Presupuesto['categoria'],
         limite: data.limite,
         gastado: 0,
         color: data.color,
         iconName: data.iconName,
       });
     }
+
+    showAlert({
+      type: 'success',
+      title: esEdicion ? 'Presupuesto actualizado' : 'Presupuesto creado',
+      message: `Categoria "${nombreCategoria}" guardada correctamente.`,
+      icon: 'presupuesto',
+      duration: 5000,
+    });
   };
 
   const handleEliminarPresupuesto = async (p: Presupuesto) => {
@@ -318,20 +380,29 @@ function AppContent() {
 
     try {
       await eliminarPresupuesto(p.id);
+      showAlert({
+        type: 'info',
+        title: 'Presupuesto eliminado',
+        message: `Se elimino "${nombre}".`,
+        icon: 'presupuesto',
+        duration: 5000,
+      });
     } catch (error) {
       console.error('Error al eliminar presupuesto:', error);
-      alert('No se pudo eliminar el presupuesto.');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'No se pudo eliminar el presupuesto.',
+      });
     }
   };
 
   const categoriasPresupuestoUsadas = useMemo(
-    () => presupuestos.map((p) => p.categoria),
+    () => presupuestos.map((p) => p.categoria as string),
     [presupuestos]
   );
 
-  // ------------------------------------------------------------------------
   // Metas
-  // ------------------------------------------------------------------------
   const handleNuevaMeta = () => {
     setMetaEditar(null);
     setIsMetaModalOpen(true);
@@ -350,7 +421,9 @@ function AppContent() {
     color: string;
     iconName: string;
   }) => {
-    if (metaEditar && metaEditar.id) {
+    const esEdicion = Boolean(metaEditar && metaEditar.id);
+
+    if (esEdicion && metaEditar?.id) {
       await actualizarMeta(metaEditar.id, {
         nombre: data.nombre,
         montoObjetivo: data.montoObjetivo,
@@ -371,6 +444,14 @@ function AppContent() {
         completada: false,
       });
     }
+
+    showAlert({
+      type: 'success',
+      title: esEdicion ? 'Meta actualizada' : 'Meta creada',
+      message: `"${data.nombre}" guardada correctamente.`,
+      icon: 'meta',
+      duration: 5000,
+    });
   };
 
   const handleEliminarMeta = async (m: MetaAhorro) => {
@@ -382,9 +463,20 @@ function AppContent() {
 
     try {
       await eliminarMeta(m.id);
+      showAlert({
+        type: 'info',
+        title: 'Meta eliminada',
+        message: `"${m.nombre}" fue eliminada.`,
+        icon: 'meta',
+        duration: 5000,
+      });
     } catch (error) {
       console.error('Error al eliminar meta:', error);
-      alert('No se pudo eliminar la meta.');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'No se pudo eliminar la meta.',
+      });
     }
   };
 
@@ -396,18 +488,34 @@ function AppContent() {
       montoActual: nuevoMonto,
       completada,
     });
+
+    const montoFormateado = new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+    }).format(monto);
+
+    showAlert({
+      type: completada ? 'success' : 'info',
+      title: completada ? 'Meta completada!' : 'Abono registrado',
+      message: completada
+        ? `Alcanzaste tu meta "${m.nombre}". Felicidades!`
+        : `Abonaste ${montoFormateado} a "${m.nombre}".`,
+      icon: 'ahorro',
+      duration: 5000,
+    });
   };
 
-  // ------------------------------------------------------------------------
   // Reset
-  // ------------------------------------------------------------------------
   const handleResetData = () => {
-    alert('Funcionalidad de reset en desarrollo. Se implementara proximamente.');
+    showAlert({
+      type: 'info',
+      title: 'Proximamente',
+      message: 'La funcionalidad de reset estara disponible en una proxima version.',
+    });
   };
 
-  // ------------------------------------------------------------------------
   // Saldo inicial
-  // ------------------------------------------------------------------------
   const handleConfirmSaldoInicial = async (monto: number) => {
     if (!usuario) return;
     try {
@@ -419,9 +527,7 @@ function AppContent() {
     }
   };
 
-  // ------------------------------------------------------------------------
   // Loading
-  // ------------------------------------------------------------------------
   if (cargando) {
     return (
       <div className="min-h-screen bg-[var(--color-bg)] flex flex-col items-center justify-center p-6 text-[var(--color-text)] transition-colors">
@@ -497,7 +603,7 @@ function AppContent() {
             <DashboardView
               summary={summary}
               transactions={transactions}
-              presupuestos={presupuestos}
+              presupuestos={presupuestosConGastado}
               metas={metas}
               cargandoPresupuestos={cargandoPresupuestos}
               cargandoMetas={cargandoMetas}
@@ -515,7 +621,7 @@ function AppContent() {
 
           {currentRoute === 'budgets' && (
             <BudgetsView
-              presupuestos={presupuestos}
+              presupuestos={presupuestosConGastado}
               cargando={cargandoPresupuestos}
               onNuevoPresupuesto={handleNuevoPresupuesto}
               onEditarPresupuesto={handleEditarPresupuesto}
@@ -588,9 +694,12 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <AlertProvider>
+        <AuthProvider>
+          <AppContent />
+          <AlertToast />
+        </AuthProvider>
+      </AlertProvider>
     </ThemeProvider>
   );
 }
