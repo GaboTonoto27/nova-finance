@@ -93,7 +93,7 @@ export type MedioPago =
 // ----------------------------------------------------------------------------
 // El usuario puede crear categorias personalizadas ademas de las
 // predeterminadas. Por eso usamos `string`.
-// Las categorias predeterminadas se listan en src/data/categorias.ts
+// Las categorias se guardan en Firestore: /users/{uid}/categorias/{id}
 // ----------------------------------------------------------------------------
 
 export type CategoriaGasto = string;
@@ -175,6 +175,35 @@ export interface MetaAhorro {
   color: string;
   iconName: string;
   completada: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================================
+// Tipos para Categorias financieras (Firestore)
+// ============================================================================
+
+/**
+ * Categoria financiera personalizable por el usuario.
+ * Ruta: /users/{userId}/categorias/{categoriaId}
+ *
+ * Sistema de soft delete con ventana de recuperacion:
+ * - Al "eliminar" una categoria, se marca `activa: false`.
+ * - El documento NO se borra, solo se oculta de la UI.
+ * - El usuario tiene 1 semana para "restaurarla".
+ * - Despues de 1 semana, el usuario ya no la ve, pero el doc persiste.
+ */
+export interface Categoria {
+  id?: string;
+  userId: string;
+  tipo: 'gasto' | 'ingreso';
+  nombre: string;
+  slug: string;
+  color: string;
+  iconName: string;
+  esPredeterminada: boolean;
+  activa: boolean;
+  desactivadaEn?: string;
   createdAt: string;
   updatedAt: string;
 }

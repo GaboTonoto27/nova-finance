@@ -10,6 +10,7 @@ import {
   Moneda,
   Presupuesto,
   MetaAhorro,
+  Categoria,
 } from './types/finance';
 import { Sidebar } from './components/common/Sidebar';
 import { MobileNav } from './components/common/MobileNav';
@@ -20,6 +21,8 @@ import { PresupuestoModal } from './components/common/PresupuestoModal';
 import { MetaModal } from './components/common/MetaModal';
 import { NovaLogo } from './components/common/NovaLogo';
 import { AlertToast } from './components/common/AlertToast';
+import { ConfirmDeleteModal } from './components/common/ConfirmDeleteModal';
+import { CategoriasEliminadasPanel } from './components/common/CategoriasEliminadasPanel';
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
 import { BudgetsView } from './views/BudgetsView';
@@ -42,9 +45,15 @@ import {
   crearPresupuestosIniciales,
 } from './firebase/presupuestos';
 import { crearMeta, actualizarMeta, eliminarMeta } from './firebase/metas';
+import {
+  crearCategoriasIniciales,
+  eliminarCategoria,
+  restaurarCategoria,
+} from './firebase/categorias';
 import { useTransacciones } from './hooks/useTransacciones';
 import { usePresupuestos } from './hooks/usePresupuestos';
 import { useMetas } from './hooks/useMetas';
+import { useCategorias } from './hooks/useCategorias';
 import { CATEGORY_LABELS } from './data/copy';
 import {
   recalcularPresupuestos,
@@ -55,7 +64,6 @@ type AuthMode = 'login' | 'register' | 'forgot';
 
 // ---------------------------------------------------------------------------
 // Mapeo del modelo legacy (Transaction, en ingles) al modelo Firestore
-// (Transaccion, en espanol).
 // ---------------------------------------------------------------------------
 function mapearATransaccion(
   tx: Omit<Transaction, 'id'>
@@ -126,6 +134,14 @@ function AppContent() {
 
   const { metas, cargando: cargandoMetas } = useMetas(usuario?.uid ?? null);
 
+  const {
+    categorias,
+    categoriasGasto,
+    categoriasIngreso,
+    categoriasRecuperables,
+    cargando: cargandoCategorias,
+  } = useCategorias(usuario?.uid ?? null);
+
   // Presupuestos con el campo 'gastado' calculado desde las transacciones reales
   const presupuestosConGastado = useMemo(
     () => recalcularPresupuestos(presupuestos, transactions),
@@ -143,6 +159,9 @@ function AppContent() {
 
   const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
   const [metaEditar, setMetaEditar] = useState<MetaAhorro | null>(null);
+
+  // Estado de confirmacion de eliminacion
+  const [categoriaAEliminar, setCategoriaAEliminar] = useState<Categoria | null>(null);
 
   // Summary calculado a partir de transacciones reales + saldo inicial
   const summary: FinancialSummary = useMemo(() => {
@@ -197,6 +216,20 @@ function AppContent() {
       setIsWelcomeModalOpen(false);
     }
   }, [usuario, perfil]);
+
+  // Auto-crear categorias iniciales
+  useEffect(() => {
+    if (
+      usuario &&
+      perfil?.saldoInicial?.configurado &&
+      !cargandoCategorias &&
+      categorias.length === 0
+    ) {
+      crearCategoriasIniciales().catch((err) => {
+        console.error('Error al crear categorias iniciales:', err);
+      });
+    }
+  }, [usuario, perfil, cargandoCategorias, categorias.length]);
 
   // Auto-crear presupuestos iniciales
   useEffect(() => {
@@ -289,7 +322,9 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [usuario]);
 
+  // ------------------------------------------------------------------------
   // Transacciones
+  // ------------------------------------------------------------------------
   const handleAddTransaction = async (newTxData: Omit<Transaction, 'id'>) => {
     try {
       const transaccionPayload = mapearATransaccion(newTxData);
@@ -319,7 +354,9 @@ function AppContent() {
     }
   };
 
+  // ------------------------------------------------------------------------
   // Presupuestos
+  // ------------------------------------------------------------------------
   const handleNuevoPresupuesto = () => {
     setPresupuestoEditar(null);
     setIsPresupuestoModalOpen(true);
@@ -402,7 +439,39 @@ function AppContent() {
     [presupuestos]
   );
 
+  // ------------------------------------------------------------------------
+  // Categorias
+  // ------------------------------------------------------------------------
+  const handleSolicitarEliminarCategoria = (categoria: Categoria) => {
+    setCategoriaAEliminar(categoria);
+  };
+
+  const handleConfirmarEliminarCategoria = async () => {
+    if (!categoriaAEliminar?.id) return;
+    await eliminarCategoria(categoriaAEliminar.id);
+    showAlert({
+      type: 'info',
+      title: 'Categoria eliminada',
+      message: `"${categoriaAEliminar.nombre}" se puede recuperar durante 7 dias.`,
+      duration: 6000,
+    });
+    setCategoriaAEliminar(null);
+  };
+
+  const handleRestaurarCategoria = async (categoria: Categoria) => {
+    if (!categoria.id) return;
+    await restaurarCategoria(categoria.id);
+    showAlert({
+      type: 'success',
+      title: 'Categoria restaurada',
+      message: `"${categoria.nombre}" volvio a estar activa.`,
+      duration: 5000,
+    });
+  };
+
+  // ------------------------------------------------------------------------
   // Metas
+  // ------------------------------------------------------------------------
   const handleNuevaMeta = () => {
     setMetaEditar(null);
     setIsMetaModalOpen(true);
@@ -506,7 +575,9 @@ function AppContent() {
     });
   };
 
+  // ------------------------------------------------------------------------
   // Reset
+  // ------------------------------------------------------------------------
   const handleResetData = () => {
     showAlert({
       type: 'info',
@@ -515,7 +586,9 @@ function AppContent() {
     });
   };
 
+  // ------------------------------------------------------------------------
   // Saldo inicial
+  // ------------------------------------------------------------------------
   const handleConfirmSaldoInicial = async (monto: number) => {
     if (!usuario) return;
     try {
@@ -527,7 +600,9 @@ function AppContent() {
     }
   };
 
+  // ------------------------------------------------------------------------
   // Loading
+  // ------------------------------------------------------------------------
   if (cargando) {
     return (
       <div className="min-h-screen bg-[var(--color-bg)] flex flex-col items-center justify-center p-6 text-[var(--color-text)] transition-colors">
@@ -644,7 +719,15 @@ function AppContent() {
 
           {currentRoute === 'insights' && <InsightsView />}
 
-          {currentRoute === 'settings' && <SettingsView onResetData={handleResetData} />}
+          {currentRoute === 'settings' && (
+            <div className="space-y-6 sm:space-y-8">
+              <CategoriasEliminadasPanel
+                categoriasRecuperables={categoriasRecuperables}
+                onRestaurar={handleRestaurarCategoria}
+              />
+              <SettingsView onResetData={handleResetData} />
+            </div>
+          )}
         </main>
       </div>
 
@@ -686,6 +769,20 @@ function AppContent() {
         }}
         onSave={handleGuardarMeta}
         metaEditar={metaEditar}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(categoriaAEliminar)}
+        onClose={() => setCategoriaAEliminar(null)}
+        onConfirm={handleConfirmarEliminarCategoria}
+        titulo="Eliminar categoria?"
+        itemNombre={categoriaAEliminar?.nombre || ''}
+        consecuencias={[
+          'Los presupuestos existentes con esta categoria van a quedar sin uso.',
+          'Las transacciones historicas con esta categoria van a seguir existiendo.',
+          'La categoria se va a ocultar de los dropdowns.',
+        ]}
+        mensajeRecuperacion="Si te arrepentis, vas a poder recuperarla durante los proximos 7 dias desde Ajustes."
       />
     </div>
   );
