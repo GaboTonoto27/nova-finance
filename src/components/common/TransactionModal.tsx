@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Check, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { Transaction, TransactionType } from '../../types/finance';
-import { CATEGORIAS_GASTO, CATEGORIAS_INGRESO } from '../../data/categorias';
+
+interface CategoriaOption {
+  value: string;
+  label: string;
+}
 
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTransaction: (transaction: Omit<Transaction, 'id'>) => void;
   initialType?: TransactionType;
+  categoriasGasto: CategoriaOption[];
+  categoriasIngreso: CategoriaOption[];
 }
 
 // Opciones de pago para GASTOS
@@ -37,12 +43,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onClose,
   onAddTransaction,
   initialType = 'expense',
+  categoriasGasto,
+  categoriasIngreso,
 }) => {
   const [type, setType] = useState<TransactionType>(initialType);
   const [merchant, setMerchant] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('mercado');
+  const [category, setCategory] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const [customPaymentMethod, setCustomPaymentMethod] = useState('');
@@ -51,8 +59,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const isExpense = type === 'expense';
 
   const categoriasDisponibles = useMemo(
-    () => (isExpense ? CATEGORIAS_GASTO : CATEGORIAS_INGRESO),
-    [isExpense]
+    () => (isExpense ? categoriasGasto : categoriasIngreso),
+    [isExpense, categoriasGasto, categoriasIngreso]
   );
 
   const mediosDisponibles = useMemo(
@@ -60,23 +68,32 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     [isExpense]
   );
 
-  // Al abrir el modal o cambiar initialType, reseteamos
+  // Al abrir el modal, resetear
   useEffect(() => {
     if (isOpen) {
       setType(initialType);
       setErrors({});
-      setCategory(initialType === 'expense' ? 'mercado' : 'sueldo');
+      setCategory('');
       setPaymentMethod(initialType === 'expense' ? 'efectivo' : 'transferencia');
       setCustomPaymentMethod('');
     }
   }, [isOpen, initialType]);
 
-  // Cuando el usuario cambia el tipo manualmente
+  // Cuando se cargan las categorias disponibles, seleccionar la primera
   useEffect(() => {
-    setCategory(type === 'expense' ? 'mercado' : 'sueldo');
-    setPaymentMethod(type === 'expense' ? 'efectivo' : 'transferencia');
-    setCustomPaymentMethod('');
-  }, [type]);
+    if (categoriasDisponibles.length > 0 && !categoriasDisponibles.some((c) => c.value === category)) {
+      setCategory(categoriasDisponibles[0].value);
+    }
+  }, [categoriasDisponibles, category]);
+
+  // Cuando el usuario cambia el tipo
+  useEffect(() => {
+    if (isOpen) {
+      setCategory('');
+      setPaymentMethod(type === 'expense' ? 'efectivo' : 'transferencia');
+      setCustomPaymentMethod('');
+    }
+  }, [type, isOpen]);
 
   if (!isOpen) return null;
 
@@ -139,8 +156,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       aria-modal="true"
       aria-labelledby="modal-title"
     >
-      <div className="relative w-full max-w-md bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl shadow-2xl p-6 sm:p-7 text-[var(--color-text)] animate-in fade-in zoom-in-95 duration-200 transition-colors">
-        {/* Header */}
+      <div className="relative w-full max-w-md bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl shadow-2xl p-6 sm:p-7 text-[var(--color-text)] animate-in fade-in zoom-in-95 duration-200 transition-colors max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border)]">
           <div>
             <h2 id="modal-title" className="text-lg font-bold text-[var(--color-text)]">
@@ -163,7 +179,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-          {/* Segmented Type Control */}
+          {/* Tipo */}
           <div className="flex p-1 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-2xl">
             <button
               type="button"
@@ -191,7 +207,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </button>
           </div>
 
-          {/* Amount */}
+          {/* Monto */}
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
               Cuanto fue? ($ COP) *
@@ -220,7 +236,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             )}
           </div>
 
-          {/* Merchant & Category */}
+          {/* Donde + Categoria */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
@@ -255,16 +271,24 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full px-3 py-2 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]"
               >
+                {categoriasDisponibles.length === 0 && (
+                  <option value="">Sin categorias disponibles</option>
+                )}
                 {categoriasDisponibles.map((cat) => (
                   <option key={cat.value} value={cat.value}>
                     {cat.label}
                   </option>
                 ))}
               </select>
+              {errors.category && (
+                <p className="text-xs text-rose-500 mt-1 font-medium">
+                  {errors.category}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Date & Payment Method */}
+          {/* Fecha + Como pago */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
@@ -300,7 +324,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Custom payment method */}
+          {/* Custom payment */}
           {paymentMethod === 'otro' && (
             <div>
               <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
@@ -325,7 +349,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
-          {/* Note */}
+          {/* Nota */}
           <div>
             <label className="block text-xs font-semibold text-[var(--color-text)] mb-1">
               Nota o detalle (opcional)
@@ -339,7 +363,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             />
           </div>
 
-          {/* Actions */}
+          {/* Acciones */}
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--color-border)]">
             <button
               type="button"

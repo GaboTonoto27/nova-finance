@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Plus, Sparkles } from 'lucide-react';
-import { Presupuesto, CategoriaGasto } from '../../types/finance';
-import { CATEGORIAS_GASTO } from '../../data/categorias';
+import { Presupuesto } from '../../types/finance';
+
+interface CategoriaOption {
+  value: string;
+  label: string;
+  color?: string;
+  iconName?: string;
+}
 
 interface PresupuestoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: {
-    categoria: CategoriaGasto | string;
+    categoria: string;
     categoriaCustom?: string;
     limite: number;
     color: string;
@@ -15,6 +21,7 @@ interface PresupuestoModalProps {
   }) => Promise<void>;
   presupuestoEditar?: Presupuesto | null;
   categoriasYaUsadas: string[];
+  categoriasGasto: CategoriaOption[];
 }
 
 const COLORES_DISPONIBLES = [
@@ -48,10 +55,11 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
   onSave,
   presupuestoEditar,
   categoriasYaUsadas,
+  categoriasGasto,
 }) => {
   const modoEdicion = Boolean(presupuestoEditar);
 
-  const [categoria, setCategoria] = useState<string>('mercado');
+  const [categoria, setCategoria] = useState<string>('');
   const [modoCustom, setModoCustom] = useState(false);
   const [categoriaCustom, setCategoriaCustom] = useState('');
   const [limite, setLimite] = useState('');
@@ -60,10 +68,15 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
+  // Categorias disponibles: predeterminadas no usadas (o todas si es edicion)
+  const categoriasDisponibles = modoEdicion
+    ? categoriasGasto
+    : categoriasGasto.filter((c) => !categoriasYaUsadas.includes(c.value));
+
   useEffect(() => {
     if (isOpen) {
       if (presupuestoEditar) {
-        const esPredeterminada = CATEGORIAS_GASTO.some(
+        const esPredeterminada = categoriasGasto.some(
           (c) => c.value === presupuestoEditar.categoria
         );
         if (esPredeterminada) {
@@ -73,13 +86,13 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
         } else {
           setModoCustom(true);
           setCategoriaCustom(presupuestoEditar.categoria);
-          setCategoria('otro');
+          setCategoria('');
         }
         setLimite(String(presupuestoEditar.limite));
         setColor(presupuestoEditar.color);
         setIconName(presupuestoEditar.iconName);
       } else {
-        const disponibles = CATEGORIAS_GASTO.filter(
+        const disponibles = categoriasGasto.filter(
           (c) => !categoriasYaUsadas.includes(c.value)
         );
         if (disponibles.length > 0) {
@@ -89,7 +102,7 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
         } else {
           setModoCustom(true);
           setCategoriaCustom('');
-          setCategoria('otro');
+          setCategoria('');
         }
         setLimite('');
         setColor('#0D9488');
@@ -97,7 +110,7 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
       }
       setError(null);
     }
-  }, [isOpen, presupuestoEditar, categoriasYaUsadas]);
+  }, [isOpen, presupuestoEditar, categoriasYaUsadas, categoriasGasto]);
 
   if (!isOpen) return null;
 
@@ -106,8 +119,10 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
     setError(null);
 
     let categoriaFinal: string = categoria;
+    let categoriaCustomFinal: string | undefined;
+
     if (modoCustom) {
-      const custom = categoriaCustom.trim().toLowerCase().replace(/\s+/g, '_');
+      const custom = categoriaCustom.trim();
       if (!custom) {
         setError('Escribi el nombre de la categoria.');
         return;
@@ -116,7 +131,8 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
         setError('La categoria debe tener al menos 2 caracteres.');
         return;
       }
-      categoriaFinal = custom;
+      categoriaFinal = custom.toLowerCase().replace(/\s+/g, '_');
+      categoriaCustomFinal = custom;
     }
 
     const limiteNum = parseFloat(limite);
@@ -128,8 +144,8 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
     try {
       setGuardando(true);
       await onSave({
-        categoria: categoriaFinal as CategoriaGasto,
-        categoriaCustom: modoCustom ? categoriaCustom.trim() : undefined,
+        categoria: categoriaFinal,
+        categoriaCustom: categoriaCustomFinal,
         limite: limiteNum,
         color,
         iconName,
@@ -141,10 +157,6 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
       setGuardando(false);
     }
   };
-
-  const categoriasDisponibles = modoEdicion
-    ? CATEGORIAS_GASTO
-    : CATEGORIAS_GASTO.filter((c) => !categoriasYaUsadas.includes(c.value));
 
   const noHayCategorias = categoriasDisponibles.length === 0 && !modoCustom;
 
@@ -185,7 +197,7 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
                 </label>
                 {noHayCategorias ? (
                   <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300">
-                    Ya usaste todas las categorias predeterminadas. Crea una
+                    Ya usaste todas las categorias disponibles. Crea una
                     categoria personalizada.
                   </div>
                 ) : (
@@ -194,6 +206,9 @@ export const PresupuestoModal: React.FC<PresupuestoModalProps> = ({
                     onChange={(e) => setCategoria(e.target.value)}
                     className="w-full px-3 py-2.5 bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
                   >
+                    {categoriasDisponibles.length === 0 && (
+                      <option value="">Sin categorias disponibles</option>
+                    )}
                     {categoriasDisponibles.map((cat) => (
                       <option key={cat.value} value={cat.value}>
                         {cat.label}

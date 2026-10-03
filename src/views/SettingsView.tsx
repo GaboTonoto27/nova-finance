@@ -9,18 +9,35 @@ import {
   Moon,
   Palette,
   Wallet,
+  Tags,
+  Plus,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { UI_COPY } from '../data/copy';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { actualizarSaldoInicial } from '../firebase/users';
 import { formatCurrency } from '../data/format';
+import { Categoria } from '../types/finance';
 
 interface SettingsViewProps {
   onResetData: () => void;
+  categoriasGasto: Categoria[];
+  categoriasIngreso: Categoria[];
+  onNuevaCategoria: (tipo: 'gasto' | 'ingreso') => void;
+  onEditarCategoria: (categoria: Categoria) => void;
+  onEliminarCategoria: (categoria: Categoria) => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({
+  onResetData,
+  categoriasGasto,
+  categoriasIngreso,
+  onNuevaCategoria,
+  onEditarCategoria,
+  onEliminarCategoria,
+}) => {
   const { theme, setTheme } = useTheme();
   const { usuario, perfil } = useAuth();
 
@@ -36,7 +53,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
   const [savingSaldo, setSavingSaldo] = useState(false);
   const [saldoError, setSaldoError] = useState<string | null>(null);
 
-  // Cargar saldo inicial actual cuando este disponible el perfil
   useEffect(() => {
     if (perfil?.saldoInicial?.configurado) {
       setSaldoInicialInput(String(perfil.saldoInicial.monto));
@@ -77,9 +93,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
     ? perfil.saldoInicial.monto
     : 0;
 
+  // Componente de lista de categorias
+  const renderListaCategorias = (
+    categorias: Categoria[],
+    tipo: 'gasto' | 'ingreso'
+  ) => (
+    <div className="space-y-2">
+      {categorias.map((cat) => (
+        <div
+          key={cat.id}
+          className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] hover:border-[var(--color-accent-border)] transition-colors group"
+        >
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold"
+              style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
+            >
+              {cat.nombre.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-[var(--color-text)] truncate">
+                {cat.nombre}
+              </p>
+              {cat.esPredeterminada && (
+                <p className="text-[11px] text-[var(--color-text-muted)] font-medium">
+                  Predeterminada
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            <button
+              type="button"
+              onClick={() => onEditarCategoria(cat)}
+              className="p-2 text-[var(--color-text-secondary)] hover:text-teal-500 hover:bg-teal-500/10 rounded-full transition-colors"
+              title="Editar"
+              aria-label="Editar categoria"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onEliminarCategoria(cat)}
+              className="p-2 text-[var(--color-text-secondary)] hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors"
+              title="Eliminar"
+              aria-label="Eliminar categoria"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200 max-w-4xl mx-auto w-full">
-      {/* View Header */}
+      {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text)]">
           {UI_COPY.sections.systemPreferences}
@@ -168,6 +239,67 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
         </div>
       </div>
 
+      {/* Mis Categorias */}
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-5 shadow-xs transition-colors interactive-card">
+        <div className="border-b border-[var(--color-border)] pb-3">
+          <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+            <Tags className="w-4 h-4 text-[var(--color-accent)] stroke-[2]" />
+            <span>Mis categorias</span>
+          </h2>
+          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+            Crea, edita o elimina las categorias que usas en presupuestos y transacciones.
+          </p>
+        </div>
+
+        {/* Categorias de gasto */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+              Gastos ({categoriasGasto.length})
+            </h3>
+            <button
+              type="button"
+              onClick={() => onNuevaCategoria('gasto')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-[11px] font-bold rounded-full transition-colors"
+            >
+              <Plus className="w-3 h-3 stroke-[2.5]" />
+              <span>Nueva</span>
+            </button>
+          </div>
+          {categoriasGasto.length === 0 ? (
+            <p className="text-xs text-[var(--color-text-muted)] italic py-3">
+              No hay categorias de gasto activas.
+            </p>
+          ) : (
+            renderListaCategorias(categoriasGasto, 'gasto')
+          )}
+        </div>
+
+        {/* Categorias de ingreso */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              Ingresos ({categoriasIngreso.length})
+            </h3>
+            <button
+              type="button"
+              onClick={() => onNuevaCategoria('ingreso')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold rounded-full transition-colors"
+            >
+              <Plus className="w-3 h-3 stroke-[2.5]" />
+              <span>Nueva</span>
+            </button>
+          </div>
+          {categoriasIngreso.length === 0 ? (
+            <p className="text-xs text-[var(--color-text-muted)] italic py-3">
+              No hay categorias de ingreso activas.
+            </p>
+          ) : (
+            renderListaCategorias(categoriasIngreso, 'ingreso')
+          )}
+        </div>
+      </div>
+
       {/* Theme / Appearance */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-4 shadow-xs transition-colors interactive-card">
         <div className="border-b border-[var(--color-border)] pb-3">
@@ -189,7 +321,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
                 ? 'border-[var(--color-accent)] bg-[var(--color-surface-subtle)] ring-1 ring-[var(--color-accent)]'
                 : 'border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]'
             }`}
-            aria-label="Seleccionar tema oscuro obsidiana"
           >
             <div className="w-10 h-10 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0 text-amber-300">
               <Moon className="w-5 h-5 stroke-[2]" />
@@ -206,7 +337,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
                 )}
               </div>
               <p className="text-xs text-[var(--color-text-secondary)] mt-1 leading-relaxed">
-                Fondo obsidiana con acentos verde azulado. Ideal para descansar la vista.
+                Fondo obsidiana con acentos verde azulado.
               </p>
             </div>
           </button>
@@ -219,7 +350,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
                 ? 'border-[var(--color-accent)] bg-[var(--color-surface-subtle)] ring-1 ring-[var(--color-accent)]'
                 : 'border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]'
             }`}
-            aria-label="Seleccionar tema claro luminoso"
           >
             <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0 text-amber-600">
               <Sun className="w-5 h-5 stroke-[2]" />
@@ -236,7 +366,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
                 )}
               </div>
               <p className="text-xs text-[var(--color-text-secondary)] mt-1 leading-relaxed">
-                Tarjetas blancas luminosas y alto contraste para leer facilmente.
+                Tarjetas blancas luminosas y alto contraste.
               </p>
             </div>
           </button>
@@ -290,16 +420,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
         </div>
       </div>
 
-      {/* Notifications & Automation */}
+      {/* Notifications */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-4 shadow-xs transition-colors interactive-card">
         <div className="border-b border-[var(--color-border)] pb-3">
           <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
             <Bell className="w-4 h-4 text-[var(--color-accent)] stroke-[2]" />
             <span>{UI_COPY.sections.alertsMonitoring}</span>
           </h2>
-          <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-            Avisos para ayudarte a no sobrepasar tus metas de gasto
-          </p>
         </div>
 
         <div className="space-y-3">
@@ -307,9 +434,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
             <div>
               <span className="text-xs font-bold text-[var(--color-text)] block">
                 Aviso cuando llegues al 90% de un presupuesto
-              </span>
-              <span className="text-xs text-[var(--color-text-secondary)] block mt-0.5">
-                Te avisaremos antes de que se acabe tu limite en cualquier categoria
               </span>
             </div>
             <input
@@ -325,9 +449,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
               <span className="text-xs font-bold text-[var(--color-text)] block">
                 Categorizacion automatica inteligente
               </span>
-              <span className="text-xs text-[var(--color-text-secondary)] block mt-0.5">
-                Detecta automaticamente el tipo de gasto segun el nombre del comercio
-              </span>
             </div>
             <input
               type="checkbox"
@@ -339,47 +460,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
         </div>
       </div>
 
-      {/* Data Privacy */}
+      {/* Privacy */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-3xl p-5 sm:p-6 space-y-3 shadow-xs transition-colors interactive-card">
         <div className="flex items-center gap-2 text-base font-bold text-[var(--color-text)]">
           <Lock className="w-4 h-4 text-[var(--color-accent)] stroke-[2]" />
           <span>Tu privacidad ante todo</span>
         </div>
         <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] leading-relaxed font-normal">
-          NOVA esta disenada pensando en la seguridad de tu informacion. Todos tus
-          datos y cuentas residen de forma privada en tu navegador. No compartimos tus
-          movimientos ni usamos rastreadores publicitarios.
+          NOVA esta disenada pensando en la seguridad de tu informacion.
         </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-          <div className="p-3.5 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] text-xs">
-            <span className="text-[var(--color-accent)] block font-bold mb-0.5">
-              1. Privacidad Local
-            </span>
-            <span className="text-[var(--color-text-secondary)] text-xs">
-              Tus finanzas no salen de tu navegador.
-            </span>
-          </div>
-          <div className="p-3.5 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] text-xs">
-            <span className="text-[var(--color-accent)] block font-bold mb-0.5">
-              2. Sin Publicidad
-            </span>
-            <span className="text-[var(--color-text-secondary)] text-xs">
-              Cero anuncios, cero venta de datos.
-            </span>
-          </div>
-          <div className="p-3.5 rounded-2xl bg-[var(--color-surface-subtle)] border border-[var(--color-border)] text-xs">
-            <span className="text-[var(--color-accent)] block font-bold mb-0.5">
-              3. Adaptada a Colombia
-            </span>
-            <span className="text-[var(--color-text-secondary)] text-xs">
-              Formateo nativo en pesos colombianos ($ COP).
-            </span>
-          </div>
-        </div>
       </div>
 
-      {/* Save & Reset Actions */}
+      {/* Actions */}
       <div className="flex items-center justify-between pt-2">
         <button
           onClick={onResetData}
@@ -392,7 +484,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onResetData }) => {
 
         <button
           onClick={handleSave}
-          className="px-6 py-2.5 bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 text-xs font-bold rounded-full transition-all shadow-sm shadow-teal-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 interactive-pill"
+          className="px-6 py-2.5 bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 text-xs font-bold rounded-full transition-all shadow-sm shadow-teal-500/10 interactive-pill"
           type="button"
         >
           {UI_COPY.actions.savePreferences}

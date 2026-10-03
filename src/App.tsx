@@ -19,6 +19,7 @@ import { TransactionModal } from './components/common/TransactionModal';
 import { WelcomeModal } from './components/common/WelcomeModal';
 import { PresupuestoModal } from './components/common/PresupuestoModal';
 import { MetaModal } from './components/common/MetaModal';
+import { CategoriaEditModal } from './components/common/CategoriaEditModal';
 import { NovaLogo } from './components/common/NovaLogo';
 import { AlertToast } from './components/common/AlertToast';
 import { ConfirmDeleteModal } from './components/common/ConfirmDeleteModal';
@@ -47,6 +48,8 @@ import {
 import { crearMeta, actualizarMeta, eliminarMeta } from './firebase/metas';
 import {
   crearCategoriasIniciales,
+  crearCategoria,
+  actualizarCategoria,
   eliminarCategoria,
   restaurarCategoria,
 } from './firebase/categorias';
@@ -152,13 +155,17 @@ function AppContent() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addModalInitialType, setAddModalInitialType] =
     useState<TransactionType>('expense');
-  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
 
   const [isPresupuestoModalOpen, setIsPresupuestoModalOpen] = useState(false);
   const [presupuestoEditar, setPresupuestoEditar] = useState<Presupuesto | null>(null);
 
   const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
   const [metaEditar, setMetaEditar] = useState<MetaAhorro | null>(null);
+
+  const [isCategoriaModalOpen, setIsCategoriaModalOpen] = useState(false);
+  const [categoriaEditar, setCategoriaEditar] = useState<Categoria | null>(null);
+  const [categoriaTipoNueva, setCategoriaTipoNueva] =
+    useState<'gasto' | 'ingreso'>('gasto');
 
   // Estado de confirmacion de eliminacion
   const [categoriaAEliminar, setCategoriaAEliminar] = useState<Categoria | null>(null);
@@ -207,16 +214,6 @@ function AppContent() {
     };
   }, [transactions, perfil]);
 
-  // Abre el modal de bienvenida si el usuario esta logueado pero
-  // todavia no configuro su saldo inicial
-  useEffect(() => {
-    if (usuario && perfil && perfil.saldoInicial && !perfil.saldoInicial.configurado) {
-      setIsWelcomeModalOpen(true);
-    } else {
-      setIsWelcomeModalOpen(false);
-    }
-  }, [usuario, perfil]);
-
   // Auto-crear categorias iniciales
   useEffect(() => {
     if (
@@ -245,7 +242,7 @@ function AppContent() {
     }
   }, [usuario, perfil, cargandoPresupuestos, presupuestos.length]);
 
-  // Detectar presupuestos excedidos y notificar al usuario una vez por sesion
+  // Detectar presupuestos excedidos
   const presupuestosExcedidosNotificados = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -368,7 +365,7 @@ function AppContent() {
   };
 
   const handleGuardarPresupuesto = async (data: {
-    categoria: Presupuesto['categoria'] | string;
+    categoria: string;
     categoriaCustom?: string;
     limite: number;
     color: string;
@@ -378,19 +375,41 @@ function AppContent() {
 
     const nombreCategoria =
       data.categoriaCustom ||
-      CATEGORY_LABELS[data.categoria as string] ||
+      CATEGORY_LABELS[data.categoria] ||
       data.categoria;
+
+    // NUEVO: Si es una categoria custom, crearla en Firestore
+    if (data.categoriaCustom) {
+      const categoriaExistente = categoriasGasto.find(
+        (c) =>
+          c.slug === data.categoria ||
+          c.nombre.toLowerCase() === data.categoriaCustom?.toLowerCase()
+      );
+
+      if (!categoriaExistente) {
+        try {
+          await crearCategoria({
+            tipo: 'gasto',
+            nombre: data.categoriaCustom,
+            color: data.color,
+            iconName: data.iconName,
+          });
+        } catch (err) {
+          console.warn('No se pudo crear la categoria custom:', err);
+        }
+      }
+    }
 
     if (esEdicion && presupuestoEditar?.id) {
       await actualizarPresupuesto(presupuestoEditar.id, {
-        categoria: data.categoria as Presupuesto['categoria'],
+        categoria: data.categoria,
         limite: data.limite,
         color: data.color,
         iconName: data.iconName,
       });
     } else {
       await crearPresupuesto({
-        categoria: data.categoria as Presupuesto['categoria'],
+        categoria: data.categoria,
         limite: data.limite,
         gastado: 0,
         color: data.color,
@@ -435,13 +454,57 @@ function AppContent() {
   };
 
   const categoriasPresupuestoUsadas = useMemo(
-    () => presupuestos.map((p) => p.categoria as string),
+    () => presupuestos.map((p) => p.categoria),
     [presupuestos]
   );
 
   // ------------------------------------------------------------------------
   // Categorias
   // ------------------------------------------------------------------------
+  const handleNuevaCategoria = (tipo: 'gasto' | 'ingreso') => {
+    setCategoriaEditar(null);
+    setCategoriaTipoNueva(tipo);
+    setIsCategoriaModalOpen(true);
+  };
+
+  const handleEditarCategoria = (categoria: Categoria) => {
+    setCategoriaEditar(categoria);
+    setIsCategoriaModalOpen(true);
+  };
+
+  const handleGuardarCategoria = async (data: {
+    nombre: string;
+    color: string;
+    iconName: string;
+  }) => {
+    if (categoriaEditar && categoriaEditar.id) {
+      await actualizarCategoria(categoriaEditar.id, {
+        nombre: data.nombre,
+        color: data.color,
+        iconName: data.iconName,
+      });
+      showAlert({
+        type: 'success',
+        title: 'Categoria actualizada',
+        message: `"${data.nombre}" fue actualizada.`,
+        duration: 5000,
+      });
+    } else {
+      await crearCategoria({
+        tipo: categoriaTipoNueva,
+        nombre: data.nombre,
+        color: data.color,
+        iconName: data.iconName,
+      });
+      showAlert({
+        type: 'success',
+        title: 'Categoria creada',
+        message: `"${data.nombre}" se agrego a tus categorias de ${categoriaTipoNueva}.`,
+        duration: 5000,
+      });
+    }
+  };
+
   const handleSolicitarEliminarCategoria = (categoria: Categoria) => {
     setCategoriaAEliminar(categoria);
   };
@@ -593,7 +656,6 @@ function AppContent() {
     if (!usuario) return;
     try {
       await actualizarSaldoInicial(usuario.uid, monto, 'COP');
-      setIsWelcomeModalOpen(false);
     } catch (error) {
       console.error('Error al guardar saldo inicial:', error);
       throw error;
@@ -617,6 +679,19 @@ function AppContent() {
             Cargando tus finanzas...
           </span>
         </div>
+      </div>
+    );
+  }
+
+  // BLOQUEO saldo inicial
+  if (usuario && perfil && perfil.saldoInicial && !perfil.saldoInicial.configurado) {
+    return (
+      <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] transition-colors">
+        <WelcomeModal
+          isOpen={true}
+          nombreUsuario={perfil?.nombre || 'Usuario'}
+          onConfirm={handleConfirmSaldoInicial}
+        />
       </div>
     );
   }
@@ -725,7 +800,14 @@ function AppContent() {
                 categoriasRecuperables={categoriasRecuperables}
                 onRestaurar={handleRestaurarCategoria}
               />
-              <SettingsView onResetData={handleResetData} />
+              <SettingsView
+                onResetData={handleResetData}
+                categoriasGasto={categoriasGasto}
+                categoriasIngreso={categoriasIngreso}
+                onNuevaCategoria={handleNuevaCategoria}
+                onEditarCategoria={handleEditarCategoria}
+                onEliminarCategoria={handleSolicitarEliminarCategoria}
+              />
             </div>
           )}
         </main>
@@ -742,12 +824,14 @@ function AppContent() {
         onClose={() => setIsAddModalOpen(false)}
         onAddTransaction={handleAddTransaction}
         initialType={addModalInitialType}
-      />
-
-      <WelcomeModal
-        isOpen={isWelcomeModalOpen}
-        nombreUsuario={perfil?.nombre || 'Usuario'}
-        onConfirm={handleConfirmSaldoInicial}
+        categoriasGasto={categoriasGasto.map((c) => ({
+          value: c.slug,
+          label: c.nombre,
+        }))}
+        categoriasIngreso={categoriasIngreso.map((c) => ({
+          value: c.slug,
+          label: c.nombre,
+        }))}
       />
 
       <PresupuestoModal
@@ -759,6 +843,12 @@ function AppContent() {
         onSave={handleGuardarPresupuesto}
         presupuestoEditar={presupuestoEditar}
         categoriasYaUsadas={categoriasPresupuestoUsadas}
+        categoriasGasto={categoriasGasto.map((c) => ({
+          value: c.slug,
+          label: c.nombre,
+          color: c.color,
+          iconName: c.iconName,
+        }))}
       />
 
       <MetaModal
@@ -769,6 +859,17 @@ function AppContent() {
         }}
         onSave={handleGuardarMeta}
         metaEditar={metaEditar}
+      />
+
+      <CategoriaEditModal
+        isOpen={isCategoriaModalOpen}
+        onClose={() => {
+          setIsCategoriaModalOpen(false);
+          setCategoriaEditar(null);
+        }}
+        onSave={handleGuardarCategoria}
+        categoriaEditar={categoriaEditar}
+        tipoNueva={categoriaTipoNueva}
       />
 
       <ConfirmDeleteModal
