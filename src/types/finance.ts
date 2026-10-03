@@ -175,6 +175,8 @@ export interface MetaAhorro {
   color: string;
   iconName: string;
   completada: boolean;
+  activa: boolean;
+  desactivadaEn?: string;
   createdAt: string;
   updatedAt: string;
 }

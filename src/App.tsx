@@ -18,12 +18,13 @@ import { Header } from './components/common/Header';
 import { TransactionModal } from './components/common/TransactionModal';
 import { WelcomeModal } from './components/common/WelcomeModal';
 import { PresupuestoModal } from './components/common/PresupuestoModal';
-import { MetaModal } from './components/common/MetaModal';
+import { MetaEditModal } from './components/common/MetaEditModal';
 import { CategoriaEditModal } from './components/common/CategoriaEditModal';
 import { NovaLogo } from './components/common/NovaLogo';
 import { AlertToast } from './components/common/AlertToast';
 import { ConfirmDeleteModal } from './components/common/ConfirmDeleteModal';
 import { CategoriasEliminadasPanel } from './components/common/CategoriasEliminadasPanel';
+import { MetasEliminadasPanel } from './components/common/MetasEliminadasPanel';
 import { DashboardView } from './views/DashboardView';
 import { TransactionsView } from './views/TransactionsView';
 import { BudgetsView } from './views/BudgetsView';
@@ -45,7 +46,12 @@ import {
   eliminarPresupuesto,
   crearPresupuestosIniciales,
 } from './firebase/presupuestos';
-import { crearMeta, actualizarMeta, eliminarMeta } from './firebase/metas';
+import {
+  crearMeta,
+  actualizarMeta,
+  eliminarMeta,
+  restaurarMeta,
+} from './firebase/metas';
 import {
   crearCategoriasIniciales,
   crearCategoria,
@@ -135,7 +141,11 @@ function AppContent() {
     usuario?.uid ?? null
   );
 
-  const { metas, cargando: cargandoMetas } = useMetas(usuario?.uid ?? null);
+  const {
+    metas,
+    metasRecuperables,
+    cargando: cargandoMetas,
+  } = useMetas(usuario?.uid ?? null);
 
   const {
     categorias,
@@ -167,8 +177,9 @@ function AppContent() {
   const [categoriaTipoNueva, setCategoriaTipoNueva] =
     useState<'gasto' | 'ingreso'>('gasto');
 
-  // Estado de confirmacion de eliminacion
+  // Estados de confirmacion de eliminacion
   const [categoriaAEliminar, setCategoriaAEliminar] = useState<Categoria | null>(null);
+  const [metaAEliminar, setMetaAEliminar] = useState<MetaAhorro | null>(null);
 
   // Summary calculado a partir de transacciones reales + saldo inicial
   const summary: FinancialSummary = useMemo(() => {
@@ -378,7 +389,7 @@ function AppContent() {
       CATEGORY_LABELS[data.categoria] ||
       data.categoria;
 
-    // NUEVO: Si es una categoria custom, crearla en Firestore
+    // Si es una categoria custom, crearla en Firestore
     if (data.categoriaCustom) {
       const categoriaExistente = categoriasGasto.find(
         (c) =>
@@ -586,30 +597,32 @@ function AppContent() {
     });
   };
 
-  const handleEliminarMeta = async (m: MetaAhorro) => {
-    if (!m.id) return;
-    const confirmado = window.confirm(
-      `Eliminar la meta "${m.nombre}"?\n\nEsta accion no se puede deshacer.`
-    );
-    if (!confirmado) return;
+  const handleSolicitarEliminarMeta = (m: MetaAhorro) => {
+    setMetaAEliminar(m);
+  };
 
-    try {
-      await eliminarMeta(m.id);
-      showAlert({
-        type: 'info',
-        title: 'Meta eliminada',
-        message: `"${m.nombre}" fue eliminada.`,
-        icon: 'meta',
-        duration: 5000,
-      });
-    } catch (error) {
-      console.error('Error al eliminar meta:', error);
-      showAlert({
-        type: 'error',
-        title: 'Error',
-        message: 'No se pudo eliminar la meta.',
-      });
-    }
+  const handleConfirmarEliminarMeta = async () => {
+    if (!metaAEliminar?.id) return;
+    await eliminarMeta(metaAEliminar.id);
+    showAlert({
+      type: 'info',
+      title: 'Meta eliminada',
+      message: `"${metaAEliminar.nombre}" se puede recuperar durante 7 dias.`,
+      icon: 'meta',
+      duration: 6000,
+    });
+    setMetaAEliminar(null);
+  };
+
+  const handleRestaurarMeta = async (meta: MetaAhorro) => {
+    if (!meta.id) return;
+    await restaurarMeta(meta.id);
+    showAlert({
+      type: 'success',
+      title: 'Meta restaurada',
+      message: `"${meta.nombre}" volvio a estar activa.`,
+      duration: 5000,
+    });
   };
 
   const handleAbonarMeta = async (m: MetaAhorro, monto: number) => {
@@ -785,7 +798,7 @@ function AppContent() {
               cargando={cargandoMetas}
               onNuevaMeta={handleNuevaMeta}
               onEditarMeta={handleEditarMeta}
-              onEliminarMeta={handleEliminarMeta}
+              onEliminarMeta={handleSolicitarEliminarMeta}
               onAbonarMeta={handleAbonarMeta}
             />
           )}
@@ -799,6 +812,10 @@ function AppContent() {
               <CategoriasEliminadasPanel
                 categoriasRecuperables={categoriasRecuperables}
                 onRestaurar={handleRestaurarCategoria}
+              />
+              <MetasEliminadasPanel
+                metasRecuperables={metasRecuperables}
+                onRestaurar={handleRestaurarMeta}
               />
               <SettingsView
                 onResetData={handleResetData}
@@ -851,7 +868,7 @@ function AppContent() {
         }))}
       />
 
-      <MetaModal
+      <MetaEditModal
         isOpen={isMetaModalOpen}
         onClose={() => {
           setIsMetaModalOpen(false);
@@ -882,6 +899,20 @@ function AppContent() {
           'Los presupuestos existentes con esta categoria van a quedar sin uso.',
           'Las transacciones historicas con esta categoria van a seguir existiendo.',
           'La categoria se va a ocultar de los dropdowns.',
+        ]}
+        mensajeRecuperacion="Si te arrepentis, vas a poder recuperarla durante los proximos 7 dias desde Ajustes."
+      />
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(metaAEliminar)}
+        onClose={() => setMetaAEliminar(null)}
+        onConfirm={handleConfirmarEliminarMeta}
+        titulo="Eliminar meta?"
+        itemNombre={metaAEliminar?.nombre || ''}
+        consecuencias={[
+          'El progreso que llevas ahorrado en esta meta se va a ocultar.',
+          'Las transacciones historicas asociadas van a seguir existiendo.',
+          'Vas a poder recuperarla desde Ajustes durante 7 dias.',
         ]}
         mensajeRecuperacion="Si te arrepentis, vas a poder recuperarla durante los proximos 7 dias desde Ajustes."
       />

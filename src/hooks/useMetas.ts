@@ -1,26 +1,28 @@
-import { useEffect, useState } from 'react';
-import { observarMetas } from '../firebase/metas';
+import { useEffect, useMemo, useState } from 'react';
+import { observarMetas, obtenerMetasRecuperables } from '../firebase/metas';
 import { MetaAhorro } from '../types/finance';
 
 // ============================================================================
-// NOVA v0.3.4 - Hook useMetas
+// NOVA v0.4.3 - Hook useMetas
 // ============================================================================
-// Se suscribe en tiempo real a las metas de ahorro del usuario en Firestore.
+// Se suscribe en tiempo real a las metas del usuario en Firestore.
+// Devuelve solo las metas activas + las recuperables por separado.
 
 export interface UseMetasResult {
   metas: MetaAhorro[];
+  metasRecuperables: MetaAhorro[];
   cargando: boolean;
   error: string | null;
 }
 
 export function useMetas(uid: string | null): UseMetasResult {
-  const [metas, setMetas] = useState<MetaAhorro[]>([]);
+  const [todasLasMetas, setTodasLasMetas] = useState<MetaAhorro[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!uid) {
-      setMetas([]);
+      setTodasLasMetas([]);
       setCargando(false);
       setError(null);
       return;
@@ -34,7 +36,7 @@ export function useMetas(uid: string | null): UseMetasResult {
     try {
       unsub = observarMetas(
         (items) => {
-          setMetas(items);
+          setTodasLasMetas(items);
           setCargando(false);
         },
         (err) => {
@@ -54,5 +56,15 @@ export function useMetas(uid: string | null): UseMetasResult {
     };
   }, [uid]);
 
-  return { metas, cargando, error };
+  const metas = useMemo(
+    () => todasLasMetas.filter((m) => m.activa !== false),
+    [todasLasMetas]
+  );
+
+  const metasRecuperables = useMemo(
+    () => obtenerMetasRecuperables(todasLasMetas),
+    [todasLasMetas]
+  );
+
+  return { metas, metasRecuperables, cargando, error };
 }

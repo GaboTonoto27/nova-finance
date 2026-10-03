@@ -4,7 +4,6 @@ import {
   addDoc,
   getDocs,
   updateDoc,
-  deleteDoc,
   query,
   orderBy,
   onSnapshot,
@@ -14,9 +13,16 @@ import { db, auth, assertFirebaseConfigured } from './config';
 import { MetaAhorro } from '../types/finance';
 
 // ============================================================================
-// NOVA v0.3.4 - Servicio de metas de ahorro en Firestore
+// NOVA v0.4.3 - Servicio de metas de ahorro en Firestore
 // ============================================================================
 // Ruta: /users/{userId}/goals/{goalId}
+//
+// Sistema de soft delete:
+// - Al "eliminar" una meta, se marca activa: false.
+// - El documento NO se borra, solo se oculta de la UI.
+// - El usuario tiene 7 dias para "restaurarla".
+
+const DIAS_RECUPERACION = 7;
 
 function obtenerUidActual(): string {
   assertFirebaseConfigured();
@@ -41,8 +47,18 @@ function limpiarUndefined<T extends Record<string, unknown>>(obj: T): Partial<T>
   return limpio;
 }
 
+// ----------------------------------------------------------------------------
+// CRUD
+// ----------------------------------------------------------------------------
+
+/**
+ * Crea una nueva meta de ahorro para el usuario autenticado.
+ */
 export async function crearMeta(
-  datos: Omit<MetaAhorro, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
+  datos: Omit<
+    MetaAhorro,
+    'id' | 'userId' | 'createdAt' | 'updatedAt' | 'activa' | 'desactivadaEn'
+  >
 ): Promise<string> {
   const uid = obtenerUidActual();
 
@@ -59,6 +75,7 @@ export async function crearMeta(
     userId: uid,
     montoActual: datos.montoActual || 0,
     completada: false,
+    activa: true,
     createdAt: ahora,
     updatedAt: ahora,
   });
@@ -72,6 +89,9 @@ export async function crearMeta(
   }
 }
 
+/**
+ * Obtiene todas las metas del usuario.
+ */
 export async function obtenerMetas(): Promise<MetaAhorro[]> {
   const uid = obtenerUidActual();
   try {
@@ -87,6 +107,9 @@ export async function obtenerMetas(): Promise<MetaAhorro[]> {
   }
 }
 
+/**
+ * Actualiza una meta existente.
+ */
 export async function actualizarMeta(
   id: string,
   datos: Partial<Omit<MetaAhorro, 'id' | 'userId' | 'createdAt'>>
@@ -107,17 +130,45 @@ export async function actualizarMeta(
   }
 }
 
+/**
+ * Soft delete: marca la meta como inactiva.
+ */
 export async function eliminarMeta(id: string): Promise<void> {
   const uid = obtenerUidActual();
   try {
     const ref = doc(db, 'users', uid, 'goals', id);
-    await deleteDoc(ref);
+    await updateDoc(ref, {
+      activa: false,
+      desactivadaEn: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
   } catch (error) {
     console.error('Error al eliminar meta:', error);
     throw new Error('No se pudo eliminar la meta.');
   }
 }
 
+/**
+ * Restaura una meta soft-deleted.
+ */
+export async function restaurarMeta(id: string): Promise<void> {
+  const uid = obtenerUidActual();
+  try {
+    const ref = doc(db, 'users', uid, 'goals', id);
+    await updateDoc(ref, {
+      activa: true,
+      desactivadaEn: null,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error al restaurar meta:', error);
+    throw new Error('No se pudo restaurar la meta.');
+  }
+}
+
+/**
+ * Observa en tiempo real las metas del usuario.
+ */
 export function observarMetas(
   callback: (metas: MetaAhorro[]) => void,
   onError?: (error: Error) => void
@@ -141,4 +192,37 @@ export function observarMetas(
       }
     }
   );
+}
+
+// ----------------------------------------------------------------------------
+// Helpers de recuperacion
+// ----------------------------------------------------------------------------
+
+/**
+ * Devuelve las metas eliminadas que aun estan en la ventana de recuperacion.
+ */
+export function obtenerMetasRecuperables(metas: MetaAhorro[]): MetaAhorro[] {
+  const ahora = new Date();
+  const msEnUnaSemana = DIAS_RECUPERACION * 24 * 60 * 60 * 1000;
+
+  return metas.filter((m) => {
+    if (m.activa !== false) return false;
+    if (!m.desactivadaEn) return false;
+    const desactivada = new Date(m.desactivadaEn);
+    const diff = ahora.getTime() - desactivada.getTime();
+    return diff < msEnUnaSemana;
+  });
+}
+
+/**
+ * Devuelve los dias restantes para recuperar una meta.
+ */
+export function diasRestantesRecuperacionMeta(meta: MetaAhorro): number {
+  if (!meta.desactivadaEn) return 0;
+  const ahora = new Date();
+  const desactivada = new Date(meta.desactivadaEn);
+  const msEnUnaSemana = DIAS_RECUPERACION * 24 * 60 * 60 * 1000;
+  const diff = ahora.getTime() - desactivada.getTime();
+  const restante = msEnUnaSemana - diff;
+  return Math.max(0, Math.ceil(restante / (24 * 60 * 60 * 1000)));
 }
